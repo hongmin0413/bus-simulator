@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#10141c">
+<title>手排公車模擬器</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" hidden><div id="hudIn">
+  <div id="top">
+    <div class="mirror" id="mirL"></div>
+    <div class="panel" id="stats">
+      <span>💰 <b id="money">$0</b></span>
+      <span>👥 <b id="pax">0/30</b></span>
+      <span>🔁 <b id="laps">0</b></span>
+    </div>
+    <button id="pauseBtn" aria-label="暫停">II</button>
+    <div id="mid">
+      <div class="panel" id="nextstop">
+        <div id="arrow">▲</div>
+        <div>
+          <div class="lbl">下一站</div>
+          <div id="stopName">—</div>
+          <div class="sub"><span id="stopDist">0 m</span> · <span id="stopTimer">0:00</span></div>
+        </div>
+      </div>
+      <div class="panel" id="hint"></div>
+      <div id="toasts"></div>
+    </div>
+    <canvas id="map" width="200" height="200"></canvas>
+    <div class="mirror round" id="mirC"></div>
+    <div class="mirror" id="mirR"></div>
+  </div>
+
+  <!-- 儀表上方：方向燈指示、雙黃燈開關、手煞車指示 -->
+  <div id="lamps">
+    <i id="indL">◀</i>
+    <button id="hazard">▲</button>
+    <i id="indR">▶</i>
+    <i id="indP">P</i>
+  </div>
+  <div class="panel" id="dash">
+    <div id="gearBox"><span id="gearTxt">N</span><span id="shiftTip"></span></div>
+    <div id="speedRow"><b id="kmh">0</b><span>km/h</span></div>
+    <div><div id="tach"><div id="tachBar"></div></div><div id="rpmTxt">0 rpm</div></div>
+  </div>
+
+  <!-- 左手：方向燈在上，離合器在下 -->
+  <div id="left">
+    <div id="signals"><button id="sigL" data-sig="L">◀</button><button id="sigR" data-sig="R">▶</button></div>
+    <div id="leftRow">
+      <div class="pedal" id="clutch"><i id="clutchFill"></i><span>離合器</span></div>
+    </div>
+  </div>
+  <!-- 右手：車門／視角／校正與排檔在上（N 檔在排檔中間一整排），手煞車、煞車、油門在下 -->
+  <div id="right">
+    <div id="rightTop">
+      <div id="acts">
+        <button data-act="door">車門</button>
+        <button data-act="cam">視角</button>
+        <button data-act="cal">校正</button>
+      </div>
+      <div id="shifter">
+        <button data-gear="R">R</button><button data-gear="1">1</button><button data-gear="3">3</button><button data-gear="5">5</button>
+        <button data-gear="N">N</button>
+        <span></span><button data-gear="2">2</button><button data-gear="4">4</button><button data-gear="6">6</button>
+      </div>
+    </div>
+    <div id="pedals">
+      <button id="hand" class="on"><b>P</b><span>手煞車</span></button>
+      <div class="pedal" id="brake"><i></i><span>煞車</span></div>
+      <div class="pedal" id="gas"><i></i><span>油門</span></div>
+    </div>
+  </div>
+</div></div>
+
+<div id="start">
+  <div class="card">
+    <h1>手排公車模擬器</h1>
+    <p>選一個關卡開始。依序停靠各站載客，跑完一圈就結算；準點、守法、不熄火，收入越高星等越高。</p>
+    <div id="levels"></div>
+    <p id="loading">載入中…</p>
+    <details>
+    <summary>操作說明</summary>
+    <ul>
+      <li><b>方向盤</b>：把手機橫拿，像方向盤一樣左右旋轉。按「校正」可重設正中位置。</li>
+      <li><b>離合器（左手）</b>：按得越靠上踩得越深。兩條虛線之間是半離合，上虛線以上才算完全分離。</li>
+      <li><b>換檔（右手）</b>：左手把離合器踩到底，右手同時點檔位。</li>
+      <li><b>手煞車（右手）</b>：排檔下方的紅色「P」。一開始是拉起的，起步前按一下放開；停好車再拉起。</li>
+      <li><b>方向燈（左手）</b>：離合器上方的 ◀ ▶，轉完彎方向盤回正會自動跳掉。儀表上方的紅色 ▲ 是雙黃燈。</li>
+      <li><b>起步</b>：入 1 檔後，左手慢慢往下滑放離合器，右手補一點油門。放太快會頓一下，甚至熄火。</li>
+      <li><b>停車</b>：停下來前要先踩離合器，否則會熄火。熄火後把離合器踩到底即可重新發動。</li>
+      <li><b>暫停</b>：左上角的「II」。可以繼續、重新開始、換關卡、重新進全螢幕、調整轉向靈敏度。退出全螢幕時會自動暫停。</li>
+      <li><b>路況</b>：路邊有違停車要繞過去；行人走斑馬線時要停下來禮讓；機車會鑽車縫，左轉的機車會先停在路口的待轉區。</li>
+      <li><b>到站</b>：停進黃色停靠區後按「車門」，乘客上下車完再按一次關門。右上角圓鏡可以看車門側的路緣。</li>
+    </ul>
+    <p class="kb">鍵盤：W 油門・S 煞車・A D 方向・Shift 離合器（放開會自動慢放）・1–6 / R / N 檔位・空白鍵 手煞車・Q E 方向燈・H 雙黃燈・F 車門・C 視角・Backspace 回上一站・M 靜音・P 暫停</p>
+    </details>
+  </div>
+</div>
+<div id="menu" hidden>
+  <div class="card small">
+    <h1 id="menuTitle">暫停</h1>
+    <div id="result" hidden><div id="resStars"></div><p id="resText"></p></div>
+    <div id="menuBtns">
+      <button id="mResume" class="main">繼續</button>
+      <button id="mRestart">重新開始</button>
+      <button id="mLevels">選擇關卡</button>
+      <button id="mFull">全螢幕</button>
+      <button id="mCal">校正方向盤</button>
+      <button id="mSens">轉向靈敏度：中</button>
+    </div>
+  </div>
+</div>
+<div id="rotate">請將手機橫放 ↻</div>
+
+<script>
+  setTimeout(function () {
+    var b = document.getElementById('loading');
+    if (b && !b.hidden) b.textContent = '載入失敗，請用 start.bat 啟動後再重新整理';
+  }, 15000);
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

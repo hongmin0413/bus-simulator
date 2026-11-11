@@ -1,0 +1,130 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: #10141c; color: #fff;
+  font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none;
+}
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+[hidden] { display: none !important; }
+
+#hud {
+  position: fixed; inset: 0; pointer-events: none;
+  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+}
+#hudIn { position: relative; width: 100%; height: 100%; }
+.panel { background: rgba(14, 20, 30, .72); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; backdrop-filter: blur(6px); }
+
+/* ── 上排：左鏡｜資訊｜下一站｜小地圖｜圓鏡｜右鏡 ── */
+#top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; gap: 8px; }
+.mirror { flex: none; width: min(21vw, 210px); aspect-ratio: 16 / 9; border: 3px solid #14171c; border-radius: 9px; box-shadow: 0 2px 8px rgba(0,0,0,.5), inset 0 0 10px rgba(0,0,0,.35); }
+.mirror.round { width: min(9.5vw, 92px); aspect-ratio: 1; border-radius: 50%; }
+#stats { flex: none; padding: 4px 9px; display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; line-height: 1.35; }
+#stats b { font-variant-numeric: tabular-nums; }
+#mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+#nextstop { padding: 4px 14px 4px 8px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+#arrow { font-size: 20px; color: #ffd54a; width: 24px; text-align: center; }
+#nextstop .lbl { font-size: 9px; opacity: .65; letter-spacing: 2px; }
+#stopName { font-size: 16px; font-weight: 700; line-height: 1.15; }
+#nextstop .sub { font-size: 11.5px; opacity: .85; font-variant-numeric: tabular-nums; }
+#stopTimer.late { color: #ff6b6b; }
+#map { flex: none; width: min(10.5vw, 100px); height: min(10.5vw, 100px); border-radius: 10px; }
+
+#hint { padding: 5px 14px; font-size: 14px; font-weight: 600; color: #ffe082; white-space: nowrap; }
+#hint:empty { display: none; }
+#toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.toast { padding: 4px 13px; border-radius: 999px; font-size: 13.5px; font-weight: 600; white-space: nowrap; background: rgba(30, 40, 55, .92); animation: pop 2.8s forwards; }
+.toast.good { background: rgba(26, 127, 75, .94); }
+.toast.bad { background: rgba(176, 42, 42, .94); }
+@keyframes pop { 0% { opacity: 0; transform: translateY(-8px); } 8%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+/* ── 儀表：檔位 / 時速 / 轉速 ── */
+#dash { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); padding: 5px 13px 7px; display: grid; grid-template-columns: auto auto; column-gap: 13px; align-items: center; }
+#gearBox { grid-row: span 2; width: 44px; height: 44px; border-radius: 9px; background: #0b1017; border: 2px solid #7fd4ff; display: grid; place-items: center; font-size: 27px; font-weight: 800; color: #7fd4ff; position: relative; }
+#gearBox.off { border-color: #ff6b6b; color: #ff6b6b; }
+#shiftTip { position: absolute; right: -11px; top: 50%; transform: translateY(-50%); font-size: 13px; color: #ffd54a; }
+#speedRow { display: flex; align-items: baseline; gap: 5px; }
+#kmh { font-size: 29px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; line-height: 1; }
+#kmh.over { color: #ff6b6b; }
+#speedRow span { font-size: 11px; opacity: .7; }
+#tach { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #26303d 0 84%, #5a2020 84%); overflow: hidden; margin-top: 4px; }
+#tachBar { height: 100%; width: 0; background: #7fd4ff; }
+#tachBar.red { background: #ff5a5a; }
+#rpmTxt { font-size: 10px; opacity: .65; font-variant-numeric: tabular-nums; }
+
+/* ── 左手：離合器。右手：排檔在上，煞車油門在下 ── */
+#left, #right { position: absolute; bottom: 0; display: flex; gap: 8px; pointer-events: auto; }
+#left { left: 0; flex-direction: column; align-items: flex-start; }
+#leftRow { display: flex; gap: 8px; align-items: flex-end; }
+/* 方向燈撥桿：在方向盤左側，所以放左手 */
+#signals { display: flex; gap: 8px; }
+#signals button { width: 66px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 19px; touch-action: none; padding: 0; }
+#signals button.on { color: #2bff7a; border-color: #2bff7a; background: rgba(30, 110, 60, .55); }
+/* 儀表上方的指示燈與雙黃燈開關 */
+#lamps { position: absolute; bottom: 66px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+#lamps i { font-style: normal; font-size: 19px; color: rgba(255,255,255,.18); width: 22px; text-align: center; }
+#lamps i.on { color: #2bff7a; text-shadow: 0 0 8px #2bff7a; }
+#indP { font-size: 13px !important; font-weight: 800; border: 2px solid currentColor; border-radius: 50%; height: 22px; line-height: 18px; }
+#indP.on { color: #ff5a5a !important; text-shadow: none !important; }
+#hazard { pointer-events: auto; width: 46px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 90, 90, .7); background: rgba(60, 14, 14, .7); color: #ff6b6b; font-size: 17px; touch-action: none; padding: 0; }
+#hazard.on { border-color: #ff5a5a; }
+#hazard.lit { background: #d42a2a; color: #fff; }
+/* 手煞車：在排檔旁，所以放右手 */
+#hand { width: 52px; height: min(27vh, 104px); border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 11.5px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 0 7px; touch-action: none; }
+#hand b { width: 30px; height: 30px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font-size: 17px; }
+#hand.on { color: #fff; border-color: #ff5a5a; background: rgba(176, 42, 42, .75); }
+#right { right: 0; flex-direction: column; align-items: flex-end; }
+#pedals { display: flex; gap: 8px; align-items: flex-end; }
+.pedal {
+  width: 66px; border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .6);
+  color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: end center; padding-bottom: 7px;
+  position: relative; overflow: hidden; touch-action: none;
+}
+.pedal i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; }
+.pedal span { position: relative; }
+#clutch { width: 78px; height: min(46vh, 190px); } #clutch i { background: rgba(255, 190, 70, .5); }
+#clutch.free i { background: rgba(120, 220, 150, .5); }
+/* 接合點刻度：踏板深度 25%~75% 之間是半離合 */
+#clutch::before, #clutch::after { content: ""; position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,.55); }
+#clutch::before { bottom: 67%; } #clutch::after { bottom: 22%; }
+#brake { height: min(27vh, 104px); } #brake i { background: rgba(255, 90, 90, .5); }
+#gas { height: min(31vh, 120px); } #gas i { background: rgba(80, 220, 140, .5); }
+#rightTop { display: flex; gap: 8px; align-items: flex-end; }
+#shifter { display: grid; grid-template-columns: repeat(4, 44px); grid-template-rows: min(10vh, 38px) min(6.5vh, 24px) min(10vh, 38px); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(14, 20, 30, .6); border: 1px solid rgba(255,255,255,.2); }
+#shifter button { border-radius: 8px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.06); color: #fff; font-size: 19px; font-weight: 800; touch-action: none; padding: 0; }
+#shifter button.cur { background: #2f8cff; border-color: #9cc9ff; }
+#shifter button[data-gear="R"] { color: #ff8a8a; }
+#shifter button[data-gear="N"] { color: #9fe3b4; grid-column: 1 / -1; font-size: 15px; }
+#acts { display: flex; flex-direction: column; gap: 6px; }
+#acts button { width: 54px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .6); color: #fff; font-size: 13px; font-weight: 700; touch-action: none; }
+#acts button:active { background: rgba(80, 160, 255, .6); }
+
+/* ── 開始畫面 ── */
+#start, #rotate { position: fixed; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .82); backdrop-filter: blur(4px); overflow: auto; }
+#start.hide { display: none; }
+#rotate { display: none; z-index: 9; font-size: 20px; font-weight: 700; text-align: center; background: #10141c; }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: grid; } }
+.card { max-width: 640px; width: 100%; background: #18202c; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 18px 22px; }
+.card h1 { margin: 0 0 6px; font-size: 24px; }
+.card p { margin: 0 0 10px; line-height: 1.55; opacity: .9; font-size: 14px; }
+.card ul { margin: 0 0 12px; padding-left: 20px; font-size: 13.5px; line-height: 1.7; }
+.card ul b { color: #7fd4ff; }
+.card .kb { font-size: 12px; opacity: .6; }
+.card details { margin-top: 10px; }
+.card summary { font-size: 14px; font-weight: 700; color: #7fd4ff; padding: 6px 0; }
+#loading { text-align: center; }
+/* 關卡選單 */
+#levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+#levels button { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: #223046; color: #fff; display: flex; flex-direction: column; gap: 4px; font: inherit; }
+#levels button:active { background: #2f8cff; }
+#levels .nm { font-size: 17px; font-weight: 800; }
+#levels .ds { font-size: 12.5px; opacity: .8; line-height: 1.45; }
+#levels .rc { font-size: 12.5px; color: #ffd54a; }
+/* 暫停鈕與暫停／結算選單 */
+#pauseBtn { flex: none; pointer-events: auto; width: 40px; height: 40px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .72); color: #fff; font-size: 15px; font-weight: 900; letter-spacing: 2px; padding: 0 0 0 2px; touch-action: none; }
+#menu { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .78); backdrop-filter: blur(4px); overflow: auto; }
+.card.small { max-width: 440px; text-align: center; }
+#menuBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+#menuBtns button { padding: 11px 6px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,.2); border-radius: 10px; background: #223046; color: #fff; }
+#menuBtns button.main { grid-column: span 2; background: #2f8cff; border-color: #2f8cff; font-size: 17px; }
+#resStars { font-size: 34px; color: #ffd54a; letter-spacing: 4px; }
+#resText { margin: 4px 0 0; }
