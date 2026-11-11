@@ -5,8 +5,5 @@
   "description": "手排公車模擬器（純前端網頁，Node 只負責在本機提供檔案）",
   "scripts": {
     "start": "node server.js"
-  },
-  "dependencies": {
-    "three": "0.160.0"
   }
 }

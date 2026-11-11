@@ -18,7 +18,7 @@
 
 ## 程式與檔案慣例
 - 程式要分檔，不要全部塞在一個 html。
-- Node 的套件放在專案目錄內（`node_modules`），不要依賴全域或 npx 快取。
+- 用到的函式庫要放在專案目錄內，不要依賴全域或 npx 快取。目前 Three.js 直接放在 `lib/`（為了 GitHub Pages），沒有 `node_modules`。
 - 與專案無關的檔案可以刪。
 - 檔案格式、記憶與工作日誌的規則比照 alms 專案，見 `AGENTS.md`。
 - css 的 @media 盡量用 min-width（由小螢幕往大螢幕寫），沿用 alms 的慣例；目前唯一的例外是「直放時顯示請橫放」用 orientation 判斷。

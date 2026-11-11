@@ -1,0 +1,15 @@
+{
+  "name": "手排公車模擬器",
+  "short_name": "手排公車",
+  "description": "原創的 3D 手排公車駕駛遊戲",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#10141c",
+  "theme_color": "#10141c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

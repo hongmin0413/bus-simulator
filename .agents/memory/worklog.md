@@ -32,3 +32,4 @@
   - 路邊違停：停在街廓中段、佔半個外側車道、閃雙黃燈，有公車站的路段不放。車輛改成瞄準車道線前方 8 公尺的點行駛，遇到違停車會往左偏繞過。
   - 測試：尖峰關卡模擬 120 秒，無車卡死、無車開上人行道、最多 22 個行人同時過馬路、待轉區最多同時 6 台機車、無 console 錯誤。斑馬線與待轉區的畫面因自動化分頁在背景不重繪，沒有截圖確認。
 - 新增 `README.md`，建立 git 版本庫並推到使用者指定的 GitHub 遠端。
+- 依使用者要求整理成 GitHub Pages 能跑：Three.js 從 `node_modules` 改放 `lib/`（連同授權條款），`js/world.js` 改匯入路徑；移除 `package.json` 的相依與 `package-lock.json`，`start.bat` 不再 `npm install`；新增 `manifest.webmanifest`、`icon.svg`、`.nojekyll`；`server.js` 補上 manifest 的 MIME。本機重新測試可載入後推上 GitHub。Pages 的開關需使用者在 GitHub 網站設定。

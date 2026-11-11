@@ -5,12 +5,13 @@
 
 ## 專案簡介
 - 手排公車模擬器：原創的 3D 公車駕駛遊戲，純前端網頁（HTML + CSS + ES module），目標是在手機瀏覽器橫放遊玩。
-- 沒有建置步驟。`server.js` 只是本機靜態檔案伺服器；唯一的套件是 `three`（放在專案內的 `node_modules`）。
+- 沒有建置步驟。`server.js` 只是本機靜態檔案伺服器；唯一用到的函式庫是 Three.js，直接放在 `lib/three.module.js`（有提交到版本庫），沒有任何要 `npm install` 的套件。
+- 線上版用 GitHub Pages 發布（`main` 分支根目錄），所以所有路徑都要用相對路徑，不能依賴 `server.js` 或 `node_modules`。推到 `main` 就會更新線上版，推之前要先問使用者。
 - 檔案分工：`index.html`（畫面結構）、`css/style.css`、`js/`（各模組，進入點 `js/main.js`）、`server.js`、`start.bat`。各 js 檔的職責寫在檔案第一行註解。
 
 ## 本機環境
 - 本機沒有安裝 Python（`python`、`python3` 只是 Windows 商店的空殼，執行會失敗）。批次改檔、文字處理不要用 Python，改用 Node.js（`node`）、PowerShell 或 Edit 工具。
-- 使用者不開 IDE，啟動方式是點兩下根目錄的 `start.bat`（會檢查 Node、缺套件時自動 `npm install`、開瀏覽器、執行 `node server.js`）。
+- 使用者不開 IDE，啟動方式是點兩下根目錄的 `start.bat`（會檢查 Node、開瀏覽器、執行 `node server.js`）。
 - 埠：HTTP `8765`（電腦）、HTTPS `8766`（手機，自簽憑證放在 `.cert/`，由 `server.js` 用 Git for Windows 內附的 openssl 自動產生）。
 
 ## 記憶

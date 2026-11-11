@@ -15,6 +15,8 @@
 ## 手機連不到電腦時
 - alms 專案的經驗（2026-10-11）：使用者家裡的 Wi-Fi 下手機與電腦互相連不到，改用「手機開熱點、電腦連熱點」就可以。這裡先用同樣做法，熱點重開後 IP 可能會變，以啟動視窗顯示的網址為準。
 
-## 對外發布（備案，尚未做）
-- 需要固定網址或不想開電腦時，可放到 GitHub Pages 這類有 HTTPS 的靜態空間。發布會讓遊戲變成公開網址，要先問使用者。
-- 注意：`node_modules` 在 `.gitignore` 裡，而 `js/world.js` 是從 `../node_modules/three/build/three.module.js` 匯入。發布前要把這個檔案複製到會被提交的位置（例如 `vendor/`）並改匯入路徑，否則線上會載入失敗。
+## GitHub Pages（2026-11-11 整理完成）
+- 版本庫已整理成可直接發布：Three.js 放在 `lib/three.module.js`、所有路徑都是相對路徑、根目錄有 `.nojekyll`（不經 Jekyll 處理）、`manifest.webmanifest` 與 `icon.svg`（讓手機能「加到主畫面」全螢幕開啟）。
+- 開啟方式：GitHub 版本庫 Settings → Pages → Source 選 Deploy from a branch → `main`、`/ (root)`。免費帳號的版本庫要是公開的才能用 Pages。
+- 線上版有正式 HTTPS，不需要自簽憑證，也不用開電腦。推到 `main` 後約一兩分鐘更新；手機若還是舊版，重新整理或清快取。
+- 尚未驗證：使用者是否已開啟 Pages、線上版實際能否載入。

@@ -1,5 +1,5 @@
 // 場景、城市、紅綠燈、路線與站牌
-import * as THREE from '../node_modules/three/build/three.module.js';
+import * as THREE from '../lib/three.module.js';   // three 0.160.0，直接放在版本庫裡，GitHub Pages 才載得到
 import { N, CELL, W, HALF, WORLD, LANE_OUT, rand, pick, rightOf, hasLight, $ } from './config.js';
 import { app } from './state.js';
 

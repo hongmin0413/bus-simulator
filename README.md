@@ -12,8 +12,10 @@
 
 需要先安裝 [Node.js](https://nodejs.org/)。
 
-- Windows：點兩下 `start.bat`。第一次會自動安裝套件，接著開啟瀏覽器。
-- 其他系統：`npm install` 後執行 `npm start`，再開 `http://localhost:8765/`。
+- Windows：點兩下 `start.bat`，會自動開啟瀏覽器。
+- 其他系統：執行 `npm start`（或 `node server.js`），再開 `http://localhost:8765/`。
+
+不需要 `npm install`，Three.js 已經放在 `lib/` 裡。
 
 啟動後會開兩個埠：
 
@@ -22,7 +24,11 @@
 | 電腦 | `http://localhost:8765/` |
 | 手機 | `https://<電腦的區域網路 IP>:8766/` |
 
-## 在手機上玩
+## 線上版（GitHub Pages）
+
+整個專案是靜態網頁，推到 GitHub 後在版本庫的 Settings → Pages 選 `main` 分支、`/ (root)` 資料夾就能發布，不需要 Node。Pages 自帶正式的 HTTPS，手機可以直接用傾斜感應；用手機 Chrome 開啟後選「加到主畫面」，就能像 app 一樣全螢幕開啟。
+
+## 在手機上玩（連自己的電腦）
 
 1. 手機和電腦連同一個網路。
 2. 電腦執行 `start.bat`，視窗會列出手機要開的網址（電腦有多張網卡時會列出好幾個，選和手機同網段的那個）。
@@ -82,10 +88,12 @@ index.html      畫面結構
 css/style.css   樣式
 js/             遊戲模組，進入點是 main.js；各檔職責寫在第一行註解
 js/levels.js    關卡設定，新增關卡只要加一筆
-server.js       本機靜態檔案伺服器（HTTP 8765、HTTPS 8766）
+lib/            Three.js 0.160.0（MIT 授權，授權條款在 lib/three.LICENSE.txt）
+manifest.webmanifest、icon.svg   「加到主畫面」用的設定與圖示
+server.js       本機靜態檔案伺服器（HTTP 8765、HTTPS 8766），線上版用不到
 start.bat       Windows 點兩下啟動
 AGENTS.md       給 AI 助理的專案規則
 .agents/        AI 助理的工作日誌與記憶
 ```
 
-沒有建置步驟，唯一的套件是 `three`。
+沒有建置步驟，也沒有需要安裝的套件。

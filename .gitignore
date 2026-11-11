@@ -1,4 +1,4 @@
-# node artifacts
+# node artifacts（目前沒有任何套件，留著以防之後加）
 node_modules
 
 # 自簽 https 憑證（server.js 自動產生，每台電腦不同）

@@ -6,12 +6,6 @@ title 手排公車模擬器
 where node >nul 2>nul
 if errorlevel 1 goto nonode
 
-if exist "node_modules\three\build\three.module.js" goto run
-echo 第一次執行，安裝套件中，請稍候...
-call npm install
-if errorlevel 1 goto fail
-
-:run
 start "" "http://localhost:8765/"
 node server.js
 goto fail
