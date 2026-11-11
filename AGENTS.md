@@ -11,7 +11,7 @@
 
 ## 本機環境
 - 本機沒有安裝 Python（`python`、`python3` 只是 Windows 商店的空殼，執行會失敗）。批次改檔、文字處理不要用 Python，改用 Node.js（`node`）、PowerShell 或 Edit 工具。
-- 使用者不開 IDE，啟動方式是點兩下根目錄的 `start.bat`（會檢查 Node、開瀏覽器、執行 `node server.js`）。
+- 使用者不開 IDE，啟動方式是點兩下根目錄的 `start.bat`（會檢查 Node、執行 `node server.js --open`；伺服器確認連得上 8765 埠才開瀏覽器）。
 - 埠：HTTP `8765`（電腦）、HTTPS `8766`（手機，自簽憑證放在 `.cert/`，由 `server.js` 用 Git for Windows 內附的 openssl 自動產生）。
 
 ## 記憶

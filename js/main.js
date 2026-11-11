@@ -9,7 +9,7 @@ import { setNextStop, updateService, toggleDoors } from './service.js';
 import { updateHud } from './hud.js';
 import { layout, render } from './view.js';
 import { initAudio, updateAudio, setAudioPaused } from './audio.js';
-import { enableTilt, calibrate } from './input.js';
+import { enableTilt, updateKeys } from './input.js';
 import { toggleHand, setSignal, toggleHazard } from './signals.js';
 import { LEVELS } from './levels.js';
 import { peds, resetPeds, updatePeds } from './peds.js';
@@ -57,8 +57,14 @@ function renderLevels() {
   });
 }
 
-let tiltReady = false, wasFull = false;
+// wantFull：使用者想不想要全螢幕。自己按切換鈕退出就記成不要，之後不會再自動進去
+let tiltReady = false, wasFull = false, wantFull = true;
+const canFull = !!document.documentElement.requestFullscreen && document.fullscreenEnabled !== false;
+document.documentElement.classList.toggle('nofs', !canFull);
+// 沒有觸控螢幕的裝置不會有傾斜感應，「校正」按鈕就不顯示
+document.documentElement.classList.toggle('notouch', !(navigator.maxTouchPoints > 0));
 async function goFull() {
+  if (!canFull) return;
   try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch { /* 非必要 */ }
   try { await screen.orientation.lock('landscape'); } catch { /* 非必要 */ }
   try { await navigator.wakeLock.request('screen'); } catch { /* 非必要 */ }
@@ -70,10 +76,12 @@ async function startLevel(n) {
   initAudio();
   if (!tiltReady) { tiltReady = true; await enableTilt(); }
   loadLevel(n);
+  $('levelCancel').hidden = true;
   $('start').classList.add('hide');
   $('menu').hidden = true;
   $('hud').hidden = false;
-  await goFull();
+  layout();   // 後照鏡的位置要在 HUD 顯示之後重算（HUD 隱藏時量到的大小是 0，鏡子會被關掉）
+  if (wantFull) await goFull();
   tilt.needCal = true;   // 以現在拿手機的角度當作方向盤正中
   app.paused = false;
   app.running = true;
@@ -99,7 +107,7 @@ function closeMenu() {
   app.paused = false;
   setAudioPaused(false);
   last = performance.now();
-  goFull();
+  if (wantFull) goFull();
 }
 function showResult() {
   const L = LEVELS[app.level], earned = game.money - game.lapStart;
@@ -116,34 +124,52 @@ function showResult() {
 $('pauseBtn').addEventListener('click', () => openMenu('pause'));
 $('mResume').addEventListener('click', closeMenu);
 $('mRestart').addEventListener('click', () => startLevel(app.level));
+// 從暫停選單去選關卡：遊戲維持暫停，選了才真的換；按取消就回到原本的選單，進度不變
 $('mLevels').addEventListener('click', () => {
-  app.running = false; app.paused = false;
   $('menu').hidden = true;
   $('hud').hidden = true;
   renderLevels();
+  $('levelCancel').hidden = false;
   $('start').classList.remove('hide');
 });
-$('mFull').addEventListener('click', goFull);
-$('mCal').addEventListener('click', () => calibrate(false));
+$('levelCancel').addEventListener('click', () => {
+  $('start').classList.add('hide');
+  $('levelCancel').hidden = true;
+  $('hud').hidden = false;
+  $('menu').hidden = false;
+  layout();
+});
+// 切換全螢幕的按鈕（每個畫面各一個）
+function toggleFull() {
+  if (document.fullscreenElement) { wantFull = false; document.exitFullscreen().catch(() => {}); }
+  else { wantFull = true; goFull(); }
+}
+document.querySelectorAll('.fsToggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); toggleFull(); }));
+// 瀏覽器規定全螢幕要由點擊觸發，所以開啟網頁後第一次點畫面時就進全螢幕
+document.addEventListener('click', () => { if (wantFull) goFull(); }, { once: true });
 $('mSens').addEventListener('click', () => {
   app.sens = (app.sens + 1) % 3;
   store.set('bus-sens', app.sens);
   $('mSens').textContent = '轉向靈敏度：' + SENS_NAME[app.sens];
 });
 addEventListener('keydown', (e) => {
-  if (e.code !== 'KeyP' || e.repeat || !app.running) return;
+  if (e.code !== 'KeyP' || e.repeat || !app.running || !$('start').classList.contains('hide')) return;
   if (app.paused) closeMenu(); else openMenu('pause');
 });
 // 退出全螢幕或切到別的 App 時自動暫停；按「繼續」會再進全螢幕
 document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) wasFull = true;
-  else if (wasFull && app.running && !app.paused) openMenu('pause');
+  const on = !!document.fullscreenElement;
+  document.querySelectorAll('.fsToggle[data-label]').forEach((b) => { b.textContent = on ? '退出全螢幕' : '全螢幕'; });
+  layout();
+  if (on) wasFull = true;
+  else if (wasFull && wantFull && app.running && !app.paused) openMenu('pause');   // 不是自己按鈕退出的（例如按返回鍵）才暫停
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && app.running && !app.paused) openMenu('pause'); });
 
 // ───────── 主迴圈 ─────────
 function tick(dt) {
   app.time += dt;
+  updateKeys(dt);
   updateBus(dt);
   updateService(dt);
   updateCars(dt);

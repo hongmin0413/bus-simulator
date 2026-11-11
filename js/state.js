@@ -12,7 +12,9 @@ export const zone = { inZone: false, along: 0, lat: 0, dist: 0 };
 export const input = { gas: 0, brake: 0, clutch: 0, clutchSlow: false, left: false, right: false, drag: null };
 export const tilt = { active: false, sign: 1, zero: 0, raw: 0, val: 0, ux: 0, uy: 0, needCal: true };
 // level: 目前關卡編號；sens: 轉向靈敏度 0 低／1 中／2 高
-export const app = { running: false, paused: false, level: 0, sens: 1, camMode: 0, muted: false, time: 0 };
+// orbit: 車外視角繞著公車轉的角度（yaw 0 = 正後方；pitch 越大越俯視）
+export const ORBIT0 = { yaw: 0, pitch: 0.35 };
+export const app = { orbit: { ...ORBIT0, drag: false }, running: false, paused: false, level: 0, sens: 1, camMode: 0, muted: false, time: 0 };
 
 export const busCenter = () => ({ x: bus.x + Math.sin(bus.h) * 3, z: bus.z + Math.cos(bus.h) * 3 });
 export function placeBusAt(x, z, h) {

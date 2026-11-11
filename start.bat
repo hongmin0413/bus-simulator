@@ -6,8 +6,8 @@ title 手排公車模擬器
 where node >nul 2>nul
 if errorlevel 1 goto nonode
 
-start "" "http://localhost:8765/"
-node server.js
+rem 伺服器啟動後會自己確認連得上 8765 埠，確定拿得到首頁才開瀏覽器
+node server.js --open
 goto fail
 
 :nonode

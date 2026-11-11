@@ -6,7 +6,7 @@ const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, exec } = require('child_process');
 
 const ROOT = __dirname;
 const HTTP_PORT = Number(process.env.PORT) || 8765;
@@ -60,17 +60,39 @@ function ensureCert(ips) {
   return null;
 }
 
+// 加上 --open 參數（start.bat 會加）時：實際連一次自己的 HTTP 埠，確定拿得到首頁才開瀏覽器
+function openBrowser(tries) {
+  const url = 'http://localhost:' + HTTP_PORT + '/';
+  const retry = () => {
+    if (tries < 20) setTimeout(() => openBrowser(tries + 1), 250);
+    else console.log('  連不上 ' + url + '，沒有開啟瀏覽器。請檢查防火牆或防毒軟體是否擋住。');
+  };
+  const req = http.get({ host: '127.0.0.1', port: HTTP_PORT, path: '/', timeout: 2000 }, (res) => {
+    res.resume();
+    if (res.statusCode !== 200) return retry();
+    exec(process.platform === 'win32' ? 'start "" "' + url + '"' : (process.platform === 'darwin' ? 'open' : 'xdg-open') + ' "' + url + '"');
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', retry);
+}
+const portError = (port) => (e) => {
+  console.log('');
+  console.log(e.code === 'EADDRINUSE' ? '  ' + port + ' 埠已經被占用：可能已經開著另一個啟動視窗，請先關掉它再試。' : '  ' + port + ' 埠啟動失敗：' + e.message);
+  if (port === HTTP_PORT) process.exit(1);
+};
+
 const ips = lanAddresses();
-http.createServer(handler).listen(HTTP_PORT, () => {
+http.createServer(handler).on('error', portError(HTTP_PORT)).listen(HTTP_PORT, () => {
   console.log('');
   console.log('  手排公車模擬器 已啟動（關閉此視窗即停止）');
   console.log('');
   console.log('  電腦：http://localhost:' + HTTP_PORT + '/');
+  if (process.argv.includes('--open')) openBrowser(0);
 });
 
 const pem = ensureCert(ips);
 if (pem) {
-  https.createServer({ key: fs.readFileSync(pem.key), cert: fs.readFileSync(pem.cert) }, handler).listen(HTTPS_PORT, () => {
+  https.createServer({ key: fs.readFileSync(pem.key), cert: fs.readFileSync(pem.cert) }, handler).on('error', portError(HTTPS_PORT)).listen(HTTPS_PORT, () => {
     for (const ip of ips) console.log('  手機：https://' + ip + ':' + HTTPS_PORT + '/   （手機與電腦要在同一個網路）');
     if (!ips.length) console.log('  手機：電腦目前沒有連上區域網路，無法提供手機網址');
     console.log('');

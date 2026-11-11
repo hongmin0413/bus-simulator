@@ -13,12 +13,16 @@ function updateCamera(dt) {
   lastCam = app.camMode;
   camera.up.set(0, app.camMode === 2 ? 0 : 1, app.camMode === 2 ? -1 : 0);
   if (app.camMode === 0) {
-    camPos.set(bus.x + fx * 7.0 + fz * 0.62, 2.25, bus.z + fz * 7.0 - fx * 0.62);
-    camLook.set(camPos.x + fx * 30, 1.2 + bus.jolt * 0.3, camPos.z + fz * 30);
+    // 駕駛座：貼著左側車窗、在前輪前方，眼睛離地約 2.3 公尺
+    camPos.set(bus.x + fx * 7.1 + fz * 0.8, 2.3, bus.z + fz * 7.1 - fx * 0.8);
+    camLook.set(camPos.x + fx * 30, 1.1 + bus.jolt * 0.3, camPos.z + fz * 30);
   } else if (app.camMode === 1) {
-    tmpV.set(c.x - fx * 19, 9, c.z - fz * 19);
-    camPos.lerp(tmpV, snap ? 1 : 1 - Math.exp(-4 * dt));
-    camLook.lerp(tmpV.set(c.x + fx * 9, 2, c.z + fz * 9), snap ? 1 : 1 - Math.exp(-8 * dt));
+    // 車外：以公車為中心，可以用手指拖曳繞著看（yaw 0 = 正後方，轉到 180 度就是看車頭）
+    const o = app.orbit, a = bus.h + Math.PI + o.yaw, flat = 20.3 * Math.cos(o.pitch);
+    tmpV.set(c.x + Math.sin(a) * flat, 2 + 20.3 * Math.sin(o.pitch), c.z + Math.cos(a) * flat);
+    camPos.lerp(tmpV, snap ? 1 : 1 - Math.exp(-(o.drag ? 18 : 4) * dt));
+    const ahead = 9 * Math.max(0, Math.cos(o.yaw));   // 從後面看時視線落在車頭前方，繞到側面或前面就看車身中心
+    camLook.lerp(tmpV.set(c.x + fx * ahead, 2, c.z + fz * ahead), snap ? 1 : 1 - Math.exp(-8 * dt));
   } else {
     camPos.set(c.x, 95, c.z);
     camLook.set(c.x, 0, c.z);

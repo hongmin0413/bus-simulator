@@ -10,7 +10,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbcd8ee);
 scene.fog = new THREE.Fog(0xbcd8ee, 160, 560);
-export const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 900);
+export const camera = new THREE.PerspectiveCamera(66, 1, 0.3, 900);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.5));
 const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
 sun.position.set(120, 200, 60);

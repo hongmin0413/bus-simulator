@@ -69,21 +69,55 @@ let steeringWheel;
   shadow.position.set(0, 0.04, 3);
   ext.add(shadow);
 
-  // 駕駛艙（左駕）
-  const trim = lambert(0x23272e), dark = lambert(0x14171c), rim = lambert(0x4a525c);
-  box(cabin, trim, 2.5, 0.6, 0.85, 0, 1.3, 8.55);
-  box(cabin, dark, 0.95, 0.22, 0.3, 0.62, 1.7, 8.35);
-  box(cabin, dark, 0.07, 2.1, 0.07, 1.26, 2.5, 9.0);
-  box(cabin, dark, 0.07, 2.1, 0.07, -1.26, 2.5, 9.0);
-  box(cabin, dark, 2.6, 0.2, 0.2, 0, 3.5, 8.95);
-  box(cabin, trim, 0.1, 0.5, 2.4, 1.27, 1.35, 7.6);
+  // 駕駛艙（左駕）。駕駛的眼睛在 [0.8, 2.3, 7.1]（見 view.js），座位貼著左側車窗、在前輪前方
+  const trim = lambert(0x2b3038), dark = lambert(0x14171c), rim = lambert(0x3a4049), grey = lambert(0x6b727c), yellow = lambert(0xf2c200);
+  // 儀表台：低而平，上緣在視線下方，才看得到車頭前的路面
+  box(cabin, trim, 2.5, 0.5, 0.7, 0, 1.25, 8.62);
+  box(cabin, dark, 2.5, 0.06, 0.75, 0, 1.52, 8.62);
+  // 駕駛正前方的儀表罩與兩顆錶
+  box(cabin, dark, 0.86, 0.26, 0.3, 0.8, 1.66, 8.42);
+  const gaugeGeo = new THREE.CircleGeometry(0.075, 20);
+  for (const gx of [0.62, 0.98]) {
+    const face = new THREE.Mesh(gaugeGeo, basic(0x24323f));
+    face.position.set(gx, 1.67, 8.265);
+    face.rotation.y = Math.PI;   // 面向駕駛
+    cabin.add(face);
+    box(cabin, basic(0xff5a4a), 0.012, 0.065, 0.005, gx - 0.015, 1.69, 8.26);
+  }
+  // 前擋風玻璃的框：左右 A 柱、上方的路線牌箱、駕駛側遮陽板、車內後照鏡
+  box(cabin, dark, 0.09, 1.85, 0.09, 1.24, 2.45, 8.98);
+  box(cabin, dark, 0.09, 1.85, 0.09, -1.24, 2.45, 8.98);
+  box(cabin, dark, 2.6, 0.34, 0.3, 0, 3.26, 8.88);
+  box(cabin, trim, 0.9, 0.22, 0.03, 0.8, 3.0, 8.72);
+  box(cabin, dark, 0.46, 0.15, 0.04, 0.05, 2.98, 8.74);
+  box(cabin, basic(0x9fb4c6), 0.42, 0.11, 0.01, 0.05, 2.98, 8.715);
+  // 左側：駕駛旁的車身與窗框（窗台以下是車身，以上是玻璃）
+  box(cabin, trim, 0.08, 1.0, 2.9, 1.265, 1.05, 7.55);
+  box(cabin, dark, 0.08, 0.1, 2.9, 1.265, 3.33, 7.55);
+  box(cabin, dark, 0.08, 1.85, 0.1, 1.265, 2.45, 6.2);
+  // 地板與天花板；右前方是車門，地板在那裡下降成上車階梯
+  box(cabin, grey, 1.8, 0.06, 3.2, 0.37, 0.97, 7.4);
+  box(cabin, grey, 0.76, 0.06, 1.9, -0.9, 0.6, 8.0);
+  box(cabin, yellow, 0.05, 0.37, 1.9, -0.52, 0.8, 8.0);
+  box(cabin, trim, 2.55, 0.05, 3.2, 0, 3.4, 7.4);
+  // 右側前門：門框後柱、門的下半部、扶手、投幣箱
+  box(cabin, dark, 0.08, 2.6, 0.1, -1.265, 2.05, 7.02);
+  box(cabin, trim, 0.06, 0.55, 1.85, -1.27, 0.72, 8.0);
+  box(cabin, dark, 0.06, 0.08, 1.85, -1.27, 2.0, 8.0);
+  box(cabin, yellow, 0.045, 2.3, 0.045, -0.5, 2.15, 7.1);
+  box(cabin, grey, 0.3, 0.75, 0.3, -0.3, 1.4, 8.05);
+  box(cabin, yellow, 0.32, 0.06, 0.32, -0.3, 1.8, 8.05);
+  // 方向盤：大客車的方向盤又大又平，像端著一個盤子
   const pivot = new THREE.Group();
-  pivot.position.set(0.62, 1.72, 7.95);
-  pivot.rotation.x = -0.75;
+  // 位置比真車離駕駛遠一點、高一點，這樣直視前方時畫面下緣還看得到方向盤的上半圈
+  pivot.position.set(0.8, 1.56, 7.98);
+  pivot.rotation.x = 1.0;   // 盤面朝上偏向駕駛，遠端比近端高
+  box(pivot, dark, 0.1, 0.1, 0.55, 0, 0, 0.28);   // 轉向柱往前下方伸進儀表台
   steeringWheel = new THREE.Group();
-  steeringWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 8, 28), rim));
-  box(steeringWheel, rim, 0.58, 0.07, 0.03, 0, 0, 0);
-  box(steeringWheel, rim, 0.07, 0.3, 0.03, 0, -0.15, 0);
+  steeringWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.027, 8, 32), rim));
+  box(steeringWheel, rim, 0.48, 0.055, 0.03, 0, 0, 0);
+  box(steeringWheel, rim, 0.055, 0.25, 0.03, 0, -0.125, 0);
+  box(steeringWheel, dark, 0.16, 0.16, 0.05, 0, 0, 0);
   pivot.add(steeringWheel);
   cabin.add(pivot);
   scene.add(busMesh);
@@ -99,8 +133,9 @@ function blocked(x, z, h) {
   return false;
 }
 
-// 轉向靈敏度（低、中、高）：手機轉幾弧度打到底，約 34、24、17 度
-export const SENS = [0.6, 0.42, 0.3];
+// 轉向靈敏度（低、中、高）：手機轉幾弧度打到底，約 23、16、11 度
+export const SENS = [0.4, 0.28, 0.19];
+const MAX_STEER = 0.85;
 let pedCool = 0, hitCooldown = 0, speedingT = 0, prevBoxKey = null, wasBraking = false;
 function crash(text) {
   const hard = Math.abs(bus.v) > 1.5;
@@ -116,18 +151,20 @@ export function updateBus(dt) {
   if (tilt.active) {
     let t = angDiff(tilt.raw, tilt.zero) / SENS[app.sens];   // 手機轉到這個角度就打到底
     t = Math.abs(t) < 0.04 ? 0 : t;
-    tilt.val += (clamp(t, -1, 1) - tilt.val) * Math.min(1, dt * 20);
-    target = tilt.val; rate = 9;
+    tilt.val += (clamp(t, -1, 1) - tilt.val) * Math.min(1, dt * 28);
+    target = tilt.val; rate = 14;
   } else if (input.drag !== null) { target = input.drag; rate = 4; }
   else target = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   bus.steerFrac += clamp(target - bus.steerFrac, -rate * dt, rate * dt);
-  bus.steer = bus.steerFrac * 0.6 / (1 + Math.abs(bus.v) * 0.075);
+  // 輪胎最大轉角約 49 度（最小迴轉半徑約 5 公尺）。中間段比較細膩、越往外打越多；車速越快轉角越小
+  bus.steer = Math.sign(bus.steerFrac) * Math.abs(bus.steerFrac) ** 1.15 * MAX_STEER / (1 + Math.abs(bus.v) * 0.045);
 
   // 縱向：引擎（經離合器）+ 煞車 + 阻力
   const hand = bus.hand || bus.doors, brk = input.brake;
   const v0 = bus.v;
   const engA = updateEngine(dt);
-  const brakeA = brk * 6 + (hand ? 8 : 0);
+  // 手煞車（與開門時的連鎖煞車）只作用在後軸：行進間拉起的減速度比腳煞車小，車停住後才鎖得住引擎的推力
+  const brakeA = brk * 6 + (hand ? (Math.abs(bus.v) > 0.5 ? 3.5 : 8) : 0);
   let a = engA;
   if (Math.abs(bus.v) > 0.02) a -= Math.sign(bus.v) * (brakeA + 0.15) + bus.v * 0.015;
   bus.v += a * dt;
@@ -201,7 +238,7 @@ export function updateBus(dt) {
   bus.doorT = clamp(bus.doorT + (bus.doors ? 1 : -1) * dt * 2, 0, 1);
   doorMeshes.forEach((d) => (d.position.z = d.userData.z - bus.doorT * 1.25));
   frontWheels.forEach((w) => (w.rotation.y = -bus.steer));
-  steeringWheel.rotation.z = bus.steerFrac * 2.2;
+  steeringWheel.rotation.z = bus.steerFrac * Math.PI * 6;   // 方向盤左右各三圈
   brakeMat.color.setHex(braking ? 0xff2020 : 0x661111);
   updateSignals(dt);
   for (const side of ['L', 'R']) sigMat[side].color.setHex(lampOn(side) ? 0xffb000 : 0x6a4a00);

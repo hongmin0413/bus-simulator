@@ -1,8 +1,8 @@
 // 儀表、提示文字與小地圖
-import { N, CELL, W, WORLD, CAP, LIMIT_KMH, CLUTCH_BITE, clamp, $ } from './config.js';
+import { N, CELL, W, WORLD, CAP, LIMIT_KMH, CLUTCH_BITE, SHIFT_UP, SHIFT_DOWN, clamp, $ } from './config.js';
 import { stops, ROUTE_NODES, roundRect } from './world.js';
 import { cars } from './traffic.js';
-import { bus, eng, game, zone, busCenter } from './state.js';
+import { bus, eng, game, zone, input, busCenter } from './state.js';
 import { lampOn } from './signals.js';
 
 const mapCtx = $('map').getContext('2d');
@@ -42,7 +42,6 @@ export function updateHud() {
   const s = stops[game.next], kmh = Math.round(Math.abs(bus.v) * 3.6);
   $('money').textContent = '$' + game.money;
   $('pax').textContent = `${game.onboard.length}/${CAP}`;
-  $('laps').textContent = game.laps;
   $('stopName').textContent = s.name;
   $('stopDist').textContent = Math.round(zone.dist) + ' m';
   const t = Math.ceil(Math.abs(game.timeLeft)), late = game.timeLeft < 0;
@@ -53,11 +52,13 @@ export function updateHud() {
   $('gearTxt').textContent = eng.gear;
   $('gearBox').classList.toggle('off', !eng.on);
   const num = +eng.gear, coupled = eng.clutch < 0.25 && num;
-  $('shiftTip').textContent = !coupled ? '' : eng.rpm > 2050 && num < 6 ? '▲' : eng.rpm < 850 && num > 1 ? '▼' : '';
+  $('shiftTip').textContent = !coupled ? '' : eng.rpm > SHIFT_UP && num < 6 ? '▲' : eng.rpm < SHIFT_DOWN && num > 1 ? '▼' : '';
   $('tachBar').style.width = clamp(eng.rpm / 2700, 0, 1) * 100 + '%';
-  $('tachBar').classList.toggle('red', eng.rpm > 2250);
+  $('tachBar').classList.toggle('red', eng.rpm > 2100);
   $('rpmTxt').textContent = Math.round(eng.rpm / 10) * 10 + ' rpm';
   $('clutchFill').style.height = eng.clutch * 100 + '%';
+  $('gasFill').style.height = input.gas * 100 + '%';
+  $('brakeFill').style.height = input.brake * 100 + '%';
   $('clutch').classList.toggle('free', eng.clutch >= CLUTCH_BITE);
 
   const litL = lampOn('L'), litR = lampOn('R');
@@ -81,7 +82,7 @@ export function updateHud() {
   else if (zone.dist < 12 && still) hint = '請對準黃色停靠區';
   else if (bus.hand && (eng.gear !== 'N' || !still)) hint = '手煞車還拉著：按右下「P」放開';
   else if (still && game.served === 0 && game.onboard.length === 0) {
-    hint = eng.gear === 'N' ? '左手離合器踩到底 → 右手入 1 檔' : eng.clutch > 0.3 ? '慢慢放離合器，同時補一點油門' : '';
+    hint = eng.gear === 'N' ? '左手離合器踩到底 → 右手把排檔桿拖進 1 檔' : eng.clutch > 0.3 ? '慢慢放離合器，同時補一點油門' : '';
   }
   $('hint').textContent = hint;
   drawMap();
