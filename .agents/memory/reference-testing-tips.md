@@ -32,9 +32,16 @@
 - 要把畫面存成圖檔（例如重做 `images/og-image.png`）：把 `app.running` 暫時設成 false 後呼叫 `view.render(0)`，同一段程式裡立刻把 WebGL 畫布畫到另一張 2D 畫布，再用 fetch 把 data URL 送到暫時開的本機 Node 接收程式存檔。
 
 ## 手機版面與觸控可以在電腦上測（2026-11-12 使用者提醒）
-- 版面：在已開啟遊戲的分頁裡加一個 `<iframe src="/" style="position:fixed;left:20px;top:20px;width:725px;height:334px;z-index:99999">`（使用者手機的可視範圍約 725×334），用 `iframe.contentWindow.__sim` 與 `contentDocument` 操作，再用 zoom 截那一塊。量 `getBoundingClientRect()` 檢查元件有沒有重疊、按鈕離踏板多遠。
+- 版面：在已開啟遊戲的分頁裡加一個 `<iframe src="/" style="position:fixed;left:20px;top:20px;width:725px;height:334px;z-index:99999">`（使用者手機的可視範圍約 640×330，另一次截圖是 725×334，兩種都要測），用 `iframe.contentWindow.__sim` 與 `contentDocument` 操作，再用 zoom 截那一塊。量 `getBoundingClientRect()` 檢查元件有沒有重疊、按鈕離踏板多遠。
 - 觸控：對元件 `dispatchEvent(new w.PointerEvent('pointerdown' / 'pointermove' / 'pointerup', { pointerId, clientX, clientY, bubbles: true, pointerType: 'touch' }))`。踏板與排檔會呼叫 `setPointerCapture`，合成事件沒有真的指標，要先把該元件的 `setPointerCapture` 換成空函式、`hasPointerCapture` 換成回傳 true。多指就用不同的 pointerId。
 - 發動要等：`startEngine()` 後要 `step(60)` 以上引擎才會點著（啟動馬達 0.9 秒）。
 - 還是測不到的：手指實際的手感、旋轉手機、聲音、手機溫度與流暢度。
 - 開測試伺服器前先看 8765 埠是不是已經被使用者的 `start.bat` 占用；是的話直接用，測完不要關。
 - 需要「按住」的按鈕（發動、喇叭）不要用 pointercancel、pointerleave 當成放開：手機長按可能被系統取消。用合成事件測不出這個問題，要特別留意（2026-11-12 發動鈕在手機上發不動）。
+
+## 模擬觸控一定要先做命中測試（2026-11-12 踩過的坑）
+- 直接對按鈕 `dispatchEvent` 會繞過瀏覽器「這個座標點到誰」的判定，按鈕被別的元素蓋住也測不出來。曾因此把手機上按不到的發動鈕、手煞車推上線。
+- 正確做法：用 `doc.elementFromPoint(x, y)` 取得該座標實際的目標，確認是按鈕本身或它的子元素，再把事件送給那個目標。每個控制項至少檢查中心與四個角。
+- 要測多種手機尺寸（至少 568×320、667×375、725×334、844×390、932×430），不能只測一種。電腦全螢幕寬度測過不代表手機沒問題。
+- 容器（`#left`、`#right`、`#center` 這類只負責排版的外框）不要設 pointer-events: auto；只有真正要按的元素才設。
+- 整趟自動駕駛測試的要點：轉向用 devicemotion 模擬傾斜（先送一次角度 0 讓它校正）；排檔桿的起點用目前檔位換算，不要量畫面上圓鈕的位置（有 0.09 秒動畫，同步推進模擬時位置會落後）；測試腳本停車後要記得重新走起步流程，否則會以為遊戲卡住。

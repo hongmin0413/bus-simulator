@@ -128,13 +128,19 @@ bindPedal('clutch', 'clutch', 0);
 
 // ───────── 拖曳排檔 ─────────
 // knob.x：0~3 第幾排（0 = R 那一排）；knob.y：-1 上排檔位、0 空檔、1 下排檔位
-// 排檔桿跟著手指自由移動，不用照著 H 型槽走：從目前的位置直接拖向想要的檔位就會入檔（1 檔可以直接拉到 2 檔、斜拖到 R）。
+// 排檔桿一直跟在手指底下，不會自己跳：
+//   在檔位上時只能沿著那一排上下動（跟真車的 H 型槽一樣），不會橫向滑進別的檔；
+//   拉回中間變成空檔後才能左右移動，離哪一排近就進哪一排，所以斜著拖（例如 2 檔往右上拖進 3 檔）也可以。
+//   每次入檔後，會以手指當時的位置重新對準那一排，連續換檔時手指的左右偏移不會越積越多。
 // 離合器沒踩到底會被擋住推不進去。
+// R 檔有防誤入：要先回到空檔、放手，再重新拖一次才進得去；從前進檔一路拖過去會被擋在 R 那一排外面。
 {
   const gate = $('shifter'), knobEl = $('knob');
   const TOP = [null, '1', '3', '5'], BOT = ['R', '2', '4', '6'];
   const POS = { 1: [1, -1], 2: [1, 1], 3: [2, -1], 4: [2, 1], 5: [3, -1], 6: [3, 1], R: [0, 1] };
-  const knob = { x: 2, y: 0, id: null, px: 0, py: 0, warned: false };
+  const IN = 0.6, OUT = 0.35, STOP = 0.3;   // 推過 IN 入檔；退回 OUT 以內變空檔；被擋住時最多推到 STOP
+  // x / y：畫面上排檔桿的位置；tx / ty：手指想帶它去的位置；col：目前對準哪一排
+  const knob = { x: 2, y: 0, tx: 2, ty: 0, col: 2, id: null, px: 0, py: 0, warned: false, fromN: true };
   const draw = () => {
     knobEl.style.left = (knob.x + 0.5) * 25 + '%';
     knobEl.style.top = 50 + knob.y * 34 + '%';
@@ -143,6 +149,7 @@ bindPedal('clutch', 'clutch', 0);
   const settle = () => {
     const p = POS[eng.gear];
     if (p) { knob.x = p[0]; knob.y = p[1]; } else { knob.x = 2; knob.y = 0; }
+    knob.tx = knob.x; knob.ty = knob.y; knob.col = knob.x;
     draw();
   };
   onGear(() => { if (knob.id === null) settle(); });
@@ -151,27 +158,35 @@ bindPedal('clutch', 'clutch', 0);
     if (knob.id !== null) return;
     gate.setPointerCapture(e.pointerId);
     knob.id = e.pointerId; knob.px = e.clientX; knob.py = e.clientY;
+    knob.tx = knob.x; knob.ty = knob.y; knob.col = Math.round(knob.x);
+    knob.fromN = eng.gear === 'N' || eng.gear === 'R'; knob.warnedR = false;   // 這次拖曳是不是從空檔（或 R 檔）開始的，是才能進 R 那一排
     knobEl.classList.add('drag');
   });
   gate.addEventListener('pointermove', (e) => {
     if (e.pointerId !== knob.id) return;
     const r = gate.getBoundingClientRect();
-    knob.x = clamp(knob.x + (e.clientX - knob.px) / (r.width / 4), 0, 3);
-    knob.y = clamp(knob.y + (e.clientY - knob.py) / (r.height * 0.34), -1, 1);
+    const minX = knob.fromN ? 0 : 0.52;
+    const rawX = knob.tx + (e.clientX - knob.px) / (r.width / 4);
+    if (rawX < minX - 0.15 && eng.gear === 'N' && !knob.warnedR) { toast('要先回空檔、放手，再拖進 R 檔', 'bad'); knob.warnedR = true; }
+    knob.tx = clamp(rawX, minX, 3);
+    knob.ty = clamp(knob.ty + (e.clientY - knob.py) / (r.height * 0.34), -1, 1);
     knob.px = e.clientX; knob.py = e.clientY;
-    const col = Math.round(knob.x);
-    if (col === 0 && knob.y < 0) knob.y = 0;   // R 那一排只有下半段
-    // 推過一半就是入檔；回到中間就是空檔；兩者之間維持原本的檔位，手抖一下不會跳檔
-    const want = knob.y < -0.55 ? TOP[col] : knob.y > 0.55 ? BOT[col] : Math.abs(knob.y) < 0.4 ? 'N' : null;
+    // 空檔時可以左右移動，離哪一排近就對準哪一排；在檔位上時鎖在那一排
+    if (eng.gear === 'N') knob.col = Math.round(knob.tx);
+    if (knob.col === 0 && knob.ty < 0) knob.ty = 0;   // R 那一排只有下半段
+    let y = knob.ty;
+    const want = y < -IN ? TOP[knob.col] : y > IN ? BOT[knob.col] : Math.abs(y) < OUT ? 'N' : null;
     if (want && want !== eng.gear) {
-      if (want === 'N') { shift('N'); knob.y = 0; }                                   // 退檔：直接彈回中間
-      else if (canShift(want)) { shift(want); knob.x = col; knob.y = Math.sign(knob.y); }   // 入檔：直接卡到定位
+      if (want === 'N') shift('N');
+      else if (canShift(want)) { shift(want); knob.tx = knob.col; }   // 入檔：以手指現在的位置重新對準這一排
       else {
         if (!knob.warned) { shift(want); knob.warned = true; }   // 只提示一次：打齒聲與原因
-        knob.y = Math.sign(knob.y) * 0.3;                         // 被擋住：只能離開中間一點點
+        y = Math.sign(y) * STOP;                                  // 被擋住：只能離開中間一點點
       }
     }
-    if (Math.abs(knob.y) < 0.25) knob.warned = false;
+    if (Math.abs(y) < 0.25) knob.warned = false;
+    knob.x = eng.gear === 'N' ? knob.tx : knob.col;
+    knob.y = y;
     draw();
   });
   for (const ev of ['pointerup', 'pointercancel']) gate.addEventListener(ev, (e) => {
@@ -195,11 +210,11 @@ document.querySelectorAll('#acts button').forEach((b) => {
 // 方向燈（左手）、雙黃燈（儀表上方）、手煞車與發動鈕（儀表兩側）
 const tap = (el, fn) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
 document.querySelectorAll('#signals [data-sig]').forEach((b) => tap(b, () => setSignal(b.dataset.sig)));
-// 喇叭：按住才響，手指放開或滑出去就停
+// 喇叭：按住才響，手指放開就停（跟發動鈕一樣，不把滑出按鈕當成放開）
 {
   const b = $('horn');
   b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (app.running && !app.paused) { setHorn(true); b.classList.add('on'); } });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { setHorn(false); b.classList.remove('on'); });
+  for (const ev of ['pointerup', 'pointercancel']) b.addEventListener(ev, () => { setHorn(false); b.classList.remove('on'); });
 }
 tap($('hazard'), toggleHazard);
 tap($('hand'), toggleHand);

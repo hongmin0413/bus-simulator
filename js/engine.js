@@ -47,6 +47,7 @@ export function setGear(g) {
 // 現在能不能入這個檔；不能時回傳原因
 function shiftBlock(g) {
   if (g !== 'N' && eng.clutch < CLUTCH_BITE) return '離合器要踩到底才能換檔';
+  if (g === 'R' && eng.gear !== 'N') return '要先回空檔才能入 R 檔';
   if (g === 'R' && bus.v > 1) return '車還在前進，不能入 R 檔';
   if (g !== 'R' && g !== 'N' && bus.v < -1) return '車還在倒退，先停下來';
   return '';

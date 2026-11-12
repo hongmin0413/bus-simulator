@@ -36,8 +36,8 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #stopTimer.late { color: #ff6b6b; }
 #map { flex: none; width: min(11vw, 120px); height: min(11vw, 120px); border-radius: 10px; }
 
-/* 提示與訊息：左邊讓開方向燈與喇叭（200px）、右邊讓開排檔與按鈕（262px），太長就換行 */
-#msgs { position: absolute; top: max(calc(var(--mw) * 0.5625 + 14px), 86px); left: 208px; right: 270px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+/* 提示與訊息：左邊讓開方向燈（140px）、右邊讓開排檔與按鈕（262px），太長就換行 */
+#msgs { position: absolute; top: max(calc(var(--mw) * 0.5625 + 14px), 86px); left: 148px; right: 270px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 #hint { padding: 4px 12px; font-size: 13px; font-weight: 600; color: #ffe082; text-align: center; text-wrap: balance; line-height: 1.35; }
 #hint:empty { display: none; }
 #toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -51,7 +51,12 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #center { position: absolute; bottom: 0; left: calc(50% - 35px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; }
 #centerRow { display: flex; align-items: flex-end; gap: 7px; }
 #dash { padding: 4px 8px 3px; display: flex; align-items: flex-end; gap: 7px; }
-.gauge svg { display: block; width: 104px; height: 54px; }
+/* 指針表的大小跟著螢幕寬度走，中下這一排才不會蓋到兩側的踏板：
+   不到 620px 放不下，只顯示數字；620px 以上顯示小一號的表；700px 以上顯示正常大小 */
+.gauge svg { display: none; width: 80px; height: 42px; }
+.gauge { min-width: 46px; }
+@media (min-width: 620px) { .gauge svg { display: block; } }
+@media (min-width: 700px) { .gauge svg { width: 104px; height: 54px; } }
 .needle { transform-origin: 60px 58px; transform: rotate(-90deg); }
 .needle line { stroke: #ff8a3c; stroke-width: 2.4; stroke-linecap: round; }
 .needle.red line { stroke: #ff3b3b; }
@@ -68,28 +73,32 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #warn i.on { color: #fff; background: #d42a2a; }
 #wStop.on { background: #e6a200; color: #1b1300; }
 /* 手煞車與發動鈕：放在儀表兩側，離煞車、油門踏板遠一點才不會誤觸 */
-#hand, #ign { pointer-events: auto; width: 50px; height: 62px; border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .7); color: #8a8f98; font-size: 11px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; touch-action: none; }
+#hand, #ign { pointer-events: auto; width: 44px; height: 62px; border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .7); color: #8a8f98; font-size: 11px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; touch-action: none; }
 #hand b, #ign b { width: 28px; height: 28px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font-size: 16px; }
 #hand.on { color: #fff; border-color: #ff5a5a; background: rgba(176, 42, 42, .8); }
 #ign { color: #ffd54a; border-color: #ffd54a; }
+@media (min-width: 700px) { #hand, #ign { width: 50px; } }
 #ign.crank { color: #10141c; background: #ffd54a; }   /* 啟動馬達正在轉 */
 #ign.on { color: #2bff7a; border-color: rgba(43, 255, 122, .5); background: rgba(20, 70, 40, .6); }
 
 /* ── 左手：離合器。右手：排檔在上，煞車油門在下 ── */
-#left, #right { position: absolute; bottom: 0; display: flex; gap: 8px; pointer-events: auto; }
+/* 這兩個外框本身不接收觸控，只有裡面的按鈕與踏板接收：外框是矩形，空白的角落會蓋到中下的手煞車與發動鈕，把觸控吃掉 */
+#left, #right { position: absolute; bottom: 0; display: flex; gap: 8px; pointer-events: none; }
+#signals button, .pedal, #acts button, #shifter { pointer-events: auto; }
 #left { left: 0; flex-direction: column; align-items: flex-start; }
 #leftRow { display: flex; gap: 8px; align-items: flex-end; }
 /* 方向燈撥桿：在方向盤左側，所以放左手 */
 #signals { display: flex; gap: 8px; }
 #signals button { width: 66px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 19px; touch-action: none; padding: 0; }
-#horn { width: 52px !important; font-size: 13px !important; font-weight: 700; color: #fff !important; }
-#horn.on { background: rgba(80, 160, 255, .6) !important; }
 #signals button.on { color: #2bff7a; border-color: #2bff7a; background: rgba(30, 110, 60, .55); }
 /* 儀表上方的指示燈與雙黃燈開關 */
 #lamps { display: flex; align-items: center; gap: 10px; }
 #lamps i { font-style: normal; font-size: 19px; color: rgba(255,255,255,.18); width: 22px; text-align: center; }
 #lamps i.on { color: #2bff7a; text-shadow: 0 0 8px #2bff7a; }
 #hazard { pointer-events: auto; width: 46px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 90, 90, .7); background: rgba(60, 14, 14, .7); color: #ff6b6b; font-size: 17px; touch-action: none; padding: 0; }
+/* 喇叭：在儀表正上方（方向盤中央的位置），按住才響 */
+#horn { pointer-events: auto; width: 58px; height: 34px; margin-left: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(14, 20, 30, .7); color: #fff; font-size: 13px; font-weight: 700; touch-action: none; padding: 0; }
+#horn.on { background: rgba(80, 160, 255, .65); }
 #hazard.on { border-color: #ff5a5a; }
 #hazard.lit { background: #d42a2a; color: #fff; }
 #right { right: 0; flex-direction: column; align-items: flex-end; }
