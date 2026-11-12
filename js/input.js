@@ -133,14 +133,16 @@ bindPedal('clutch', 'clutch', 0);
 //   拉回中間變成空檔後才能左右移動，離哪一排近就進哪一排，所以斜著拖（例如 2 檔往右上拖進 3 檔）也可以。
 //   每次入檔後，會以手指當時的位置重新對準那一排，連續換檔時手指的左右偏移不會越積越多。
 // 離合器沒踩到底會被擋住推不進去。
-// R 檔有防誤入：要先回到空檔、放手，再重新拖一次才進得去；從前進檔一路拖過去會被擋在 R 那一排外面。
+// R 檔有防誤入的擋塊（跟真車一樣，手不用離開排檔桿）：要先回到空檔，在空檔的橫槽裡往左多推一段、頂過擋塊才進得了 R 那一排；
+// 還在檔位上、或斜著一路拖過去，都會被擋在外面。
 {
   const gate = $('shifter'), knobEl = $('knob');
   const TOP = [null, '1', '3', '5'], BOT = ['R', '2', '4', '6'];
   const POS = { 1: [1, -1], 2: [1, 1], 3: [2, -1], 4: [2, 1], 5: [3, -1], 6: [3, 1], R: [0, 1] };
   const IN = 0.6, OUT = 0.35, STOP = 0.3;   // 推過 IN 入檔；退回 OUT 以內變空檔；被擋住時最多推到 STOP
+  const R_STOP = 0.52, R_PUSH = 0.45;        // R 檔擋塊的位置（第幾排）；要多推多少排的距離才頂得開
   // x / y：畫面上排檔桿的位置；tx / ty：手指想帶它去的位置；col：目前對準哪一排
-  const knob = { x: 2, y: 0, tx: 2, ty: 0, col: 2, id: null, px: 0, py: 0, warned: false, fromN: true };
+  const knob = { x: 2, y: 0, tx: 2, ty: 0, col: 2, id: null, px: 0, py: 0, warned: false, push: 0, rOpen: false, warnedR: false };
   const draw = () => {
     knobEl.style.left = (knob.x + 0.5) * 25 + '%';
     knobEl.style.top = 50 + knob.y * 34 + '%';
@@ -159,16 +161,23 @@ bindPedal('clutch', 'clutch', 0);
     gate.setPointerCapture(e.pointerId);
     knob.id = e.pointerId; knob.px = e.clientX; knob.py = e.clientY;
     knob.tx = knob.x; knob.ty = knob.y; knob.col = Math.round(knob.x);
-    knob.fromN = eng.gear === 'N' || eng.gear === 'R'; knob.warnedR = false;   // 這次拖曳是不是從空檔（或 R 檔）開始的，是才能進 R 那一排
+    knob.push = 0; knob.rOpen = knob.x < 0.5; knob.warnedR = false;   // 已經在 R 那一排的話，擋塊算是開著的
     knobEl.classList.add('drag');
   });
   gate.addEventListener('pointermove', (e) => {
     if (e.pointerId !== knob.id) return;
     const r = gate.getBoundingClientRect();
-    const minX = knob.fromN ? 0 : 0.52;
-    const rawX = knob.tx + (e.clientX - knob.px) / (r.width / 4);
-    if (rawX < minX - 0.15 && eng.gear === 'N' && !knob.warnedR) { toast('要先回空檔、放手，再拖進 R 檔', 'bad'); knob.warnedR = true; }
-    knob.tx = clamp(rawX, minX, 3);
+    let nx = knob.tx + (e.clientX - knob.px) / (r.width / 4);
+    if (!knob.rOpen && nx < R_STOP) {
+      // 撞到 R 檔的擋塊：在空檔的橫槽裡繼續往左推，累積推過 R_PUSH 才頂得開
+      if (eng.gear === 'N' && Math.abs(knob.ty) < OUT) {
+        knob.push += R_STOP - nx;
+        if (knob.push > R_PUSH) knob.rOpen = true;
+      } else if (!knob.warnedR && nx < R_STOP - 0.2) { toast('要先回空檔，再往左多推一點進 R 檔', 'bad'); knob.warnedR = true; }
+      if (!knob.rOpen) nx = R_STOP;
+    }
+    if (nx > R_STOP + 0.1) { knob.push = 0; knob.rOpen = false; }   // 離開擋塊就復位
+    knob.tx = clamp(nx, 0, 3);
     knob.ty = clamp(knob.ty + (e.clientY - knob.py) / (r.height * 0.34), -1, 1);
     knob.px = e.clientX; knob.py = e.clientY;
     // 空檔時可以左右移動，離哪一排近就對準哪一排；在檔位上時鎖在那一排

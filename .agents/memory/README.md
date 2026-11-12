@@ -6,7 +6,7 @@
 |---|---|---|
 | worklog | 工作日誌（舊到新，同日合併，列點） | [worklog.md](worklog.md) |
 | project-status | 目前做到哪：已完成的功能、操作配置、尚未實測的項目、待辦與想法 | [project-status.md](project-status.md) |
-| feedback-user-preferences | 使用者偏好：溝通方式、遊戲設計要求（手排、離合器、後照鏡、聲音）、程式與檔案慣例 | [feedback-user-preferences.md](feedback-user-preferences.md) |
+| feedback-user-preferences | 使用者偏好：溝通方式、遊戲設計要求（手排、離合器、後照鏡、聲音）、功能要對應真實情況（使用者提的做法先說明真實情況再讓他選）、程式與檔案慣例 | [feedback-user-preferences.md](feedback-user-preferences.md) |
 | reference-driving-model | 手排動力模型的設計與調校數值（離合器接合點、怠速、熄火、各檔極速），調手感前先看 | [reference-driving-model.md](reference-driving-model.md) |
 | reference-world-model | 道路與座標模型：格子座標與世界座標（彎路的做法）、三種道路的規格、路口尺寸，改道路或新增場景物件前先看 | [reference-world-model.md](reference-world-model.md) |
 | reference-testing-tips | 測試注意事項：`__sim.step`／`hold`、分頁更新率、離合器測試腳本的寫法、傾斜感應模擬、擺放公車、存圖 | [reference-testing-tips.md](reference-testing-tips.md) |
