@@ -1,17 +1,19 @@
 // 到站服務：開關門、乘客上下車、車資與下一站
-import { CAP, rand } from './config.js';
+import { CAP, rand, warp } from './config.js';
 import { stops, updateFigs, beam } from './world.js';
-import { bus, game, zone, app, busCenter, placeBusAt } from './state.js';
+import { resetRules } from './rules.js';
+import { bus, bg, game, zone, app, placeBusAt } from './state.js';
 import { setGear } from './engine.js';
 import { toast, addMoney } from './ui.js';
 import { sfx } from './audio.js';
 
 export function setNextStop(i) {
   game.next = i;
-  const s = stops[i], c = busCenter();
-  game.timeLeft = ((Math.abs(s.x - c.x) + Math.abs(s.z - c.z)) / 6 + 25) * game.timeMul;
+  game.bell = false;
+  const s = stops[i], w = warp(s.x, s.z);
+  game.timeLeft = ((Math.abs(s.x - bg.x) + Math.abs(s.z - bg.z)) / 6 + 25) * game.timeMul;
   stops.forEach((o) => (o.zoneMat.opacity = o === s ? 0.5 : 0.15));
-  beam.position.set(s.x, 25, s.z);
+  beam.position.set(w.x, 25, w.z);
 }
 
 export function resetBus() {
@@ -20,6 +22,7 @@ export function resetBus() {
   placeBusAt(s.x, s.z, s.heading);
   setGear('N');
   bus.hand = true;
+  resetRules();
   toast('已回到 ' + s.name);
 }
 
@@ -46,7 +49,7 @@ export function toggleDoors() {
     if (game.service) {
       game.service = null;
       const n = (game.next + 1) % stops.length;
-      if (n === 0) { game.laps++; addMoney(100, '完成一圈'); game.lapDone = true; }
+      if (n === 0) { addMoney(100, '完成一圈'); game.lapDone = true; }
       setNextStop(n);
     }
   }
@@ -54,18 +57,20 @@ export function toggleDoors() {
 
 export function updateService(dt) {
   if (!game.service) game.timeLeft -= dt;
+  // 下車鈴：快到站時（150 公尺內），車上有人要在這一站下車就會按鈴
+  if (!game.bell && !bus.doors && zone.dist > 20 && zone.dist < 150 && game.onboard.includes(game.next)) { game.bell = true; sfx.bell(); }
   // 各站陸續有新乘客來候車
   for (const s of stops) {
-    if (s.waiting >= 6 || (game.service && game.service.stop === s.idx)) continue;
+    if (s.waiting >= s.max || (game.service && game.service.stop === s.idx)) continue;
     s.regen -= dt;
-    if (s.regen <= 0) { s.waiting++; s.regen = rand(7, 16); updateFigs(s); }
+    if (s.regen <= 0) { s.waiting++; s.regen = rand(5, 11) / s.crowd; updateFigs(s); }
   }
 
   const sv = game.service;
   if (!sv || sv.done || bus.doorT < 1) return;
   sv.t -= dt;
   if (sv.t > 0) return;
-  sv.t = 0.38;
+  sv.t = 0.3;
   const s = stops[sv.stop];
   if (sv.alight > 0) {
     game.onboard.splice(game.onboard.indexOf(sv.stop), 1);

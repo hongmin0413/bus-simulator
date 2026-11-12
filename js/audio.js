@@ -2,7 +2,7 @@
 import { clamp } from './config.js';
 import { bus, eng, app } from './state.js';
 
-let ctx = null, master, noiseBuf, n = null, beepT = 0;
+let ctx = null, master, cabinLP, cabinGain, noiseBuf, n = null, beepT = 0, purgeT = 40;
 
 function noiseSource() {
   const s = ctx.createBufferSource();
@@ -121,16 +121,30 @@ export function initAudio() {
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
-    const engine = buildEngine(ctx, master, noiseBuf);
+    // 引擎、路噪、風切都先經過「車廂」這一層：坐在駕駛座時隔著車體，聲音比較悶也比較小；切到車外才聽到完整的引擎聲。
+    // 方向燈、開關門提示音這些車內的聲音不經過這一層，所以一定比引擎聲清楚
+    cabinGain = gainNode(0.4, master);
+    cabinLP = filter('lowpass', 1500, 0.5, cabinGain);
+    const engine = buildEngine(ctx, cabinLP, noiseBuf);
 
     // 路噪、風切
-    const roadGain = gainNode(0, master);
+    const roadGain = gainNode(0, cabinLP);
     const roadLP = filter('lowpass', 300, 0.5, roadGain);
     noiseSource().connect(roadLP);
-    const windGain = gainNode(0, master);
+    const windGain = gainNode(0, cabinLP);
     noiseSource().connect(filter('bandpass', 900, 0.4, windGain));
 
-    n = { engine, roadGain, roadLP, windGain };
+    // 啟動馬達：一直開著的聲源，只有正在發動時才有音量，所以放開發動鈕聲音會馬上停。
+    // 低沉的馬達聲加上每秒約 13 下的抖動（馬達帶著引擎一缸一缸壓過去）
+    const starterGain = gainNode(0, master), starterLP = filter('lowpass', 1100, 0.7, starterGain);
+    const chop = gainNode(0.6, starterLP), lfo = ctx.createOscillator(), lfoDepth = gainNode(0.4, chop.gain);
+    lfo.type = 'sine'; lfo.frequency.value = 13; lfo.connect(lfoDepth); lfo.start();
+    for (const [type, f, v] of [['square', 92, 0.5], ['sawtooth', 185, 0.35]]) {
+      const o = ctx.createOscillator();
+      o.type = type; o.frequency.value = f; o.connect(gainNode(v, chop)); o.start();
+    }
+
+    n = { engine, roadGain, roadLP, windGain, starterGain };
   } catch { ctx = null; n = null; }
 }
 
@@ -145,11 +159,18 @@ const set = (param, v, tc = 0.04) => param.setTargetAtTime(v, ctx.currentTime, t
 export function updateAudio(dt) {
   if (!n) return;
   set(master.gain, app.muted ? 0 : 0.9, 0.05);
+  const inside = app.camMode === 0;
+  set(cabinLP.frequency, inside ? 1500 : 9000, 0.15);
+  set(cabinGain.gain, inside ? 0.4 : 0.7, 0.15);
   setEngine(n.engine, eng.rpm, eng.on ? eng.thr : 0, eng.on, set);
+  set(n.starterGain.gain, eng.crank > 0 ? 0.16 : 0, 0.015);
   const sp = Math.abs(bus.v);
   set(n.roadGain.gain, clamp(sp / 18, 0, 1) * 0.09, 0.1);
   set(n.roadLP.frequency, 180 + sp * 28, 0.1);
   set(n.windGain.gain, clamp(sp / 25, 0, 1) ** 2 * 0.05, 0.1);
+
+  // 氣壓系統打滿氣後，空氣乾燥器每隔一陣子會「噗嘶」排一次氣
+  if (eng.on) { purgeT -= dt; if (purgeT <= 0) { purgeT = 35 + Math.random() * 50; sfx.purge(); } }
 
   // 倒車警示音
   if (eng.gear === 'R' && eng.on) {
@@ -183,12 +204,31 @@ function burst(filterType, freq, len, vol, delay = 0) {
   s.start(t, Math.random()); s.stop(t + len + 0.05);
 }
 
+// 喇叭：大客車的雙音氣喇叭，按住才響。車內的聲音，不經過「車廂」那一層
+let horn = null;
+export function setHorn(on) {
+  if (!ctx || app.muted) on = false;
+  if (on && !horn) {
+    const g = gainNode(0, master), lp = filter('lowpass', 2400, 0.7, g), now = ctx.currentTime;
+    const oscs = [311, 370].map((f) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); return o; });
+    g.gain.setTargetAtTime(0.32, now, 0.02);
+    horn = { g, oscs };
+  } else if (!on && horn) {
+    const h = horn, now = ctx.currentTime;
+    horn = null;
+    h.g.gain.setTargetAtTime(0, now, 0.04);
+    h.oscs.forEach((o) => o.stop(now + 0.3));
+  }
+}
+
 export const sfx = {
   air(len = 0.45) { burst('highpass', 2600, len, 0.14); },                    // 氣煞 / 氣動門洩氣
   shift() { tone('triangle', 150, 70, 0.07, 0.2); burst('bandpass', 900, 0.05, 0.08); },
   grind() { for (let k = 0; k < 6; k++) tone('sawtooth', 210 + k * 9, 180, 0.05, 0.1, k * 0.045); },
-  starter() { for (let k = 0; k < 7; k++) tone('square', 95, 70, 0.06, 0.09, k * 0.075); },
-  tick(hi) { burst('bandpass', hi ? 2600 : 1900, 0.03, 0.16); },               // 方向燈繼電器
+  bell() { tone('sine', 1320, 1320, 0.5, 0.28); tone('sine', 1050, 1050, 0.7, 0.28, 0.28); },   // 下車鈴：叮咚
+  purge() { burst('highpass', 3200, 0.5, 0.12); },   // 空氣乾燥器排氣
+  // 方向燈繼電器的喀、噠聲：要比引擎聲明顯
+  tick(hi) { burst('bandpass', hi ? 2600 : 1900, 0.04, 0.6); tone('square', hi ? 1500 : 1150, hi ? 1300 : 1000, 0.03, 0.22); },
   thump(vol = 0.3) { burst('lowpass', 180, 0.22, vol); tone('sine', 70, 38, 0.18, vol * 0.8); },
   doorOpen() { this.air(0.6); tone('sine', 880, 880, 0.35, 0.1, 0.1); tone('sine', 660, 660, 0.4, 0.1, 0.3); },
   doorClose() { tone('sine', 660, 660, 0.35, 0.1); tone('sine', 880, 880, 0.4, 0.1, 0.2); this.air(0.5); },

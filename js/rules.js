@@ -1,0 +1,85 @@
+// 交通違規判定：闖紅燈、超速、逆向、轉彎或變換車道沒打方向燈。全部用公車的格子座標（bg）判斷
+import { CELL, LIMIT_KMH, ROAD_V, ROAD_H, nodeOf, hasLight } from './config.js';
+import { lightState } from './world.js';
+import { bus, bg, app } from './state.js';
+import { addMoney } from './ui.js';
+
+const NEAR = 14;   // 離路口邊緣這麼近就算「正在過路口」：大客車轉彎要甩很大，這一段不判逆向與變換車道
+let prevBox = null, speedingT = 0, wrongT = 0, laneCool = 0;
+let zone = null;        // 進入路口範圍時記下的行車方向與時間；不在路口範圍時為 null
+let lane = null;        // 目前在第幾個車道（由內往外，-1 = 壓到對向）；剛離開路口或重設後為 null
+const sigT = { L: -99, R: -99 };   // 左、右方向燈最後一次亮著的時間
+
+export function resetRules() {
+  prevBox = null; speedingT = 0; wrongT = 0; laneCool = 0; zone = null; lane = null;
+  sigT.L = sigT.R = -99;
+}
+
+export function updateRules(dt) {
+  const t = app.time, kmh = Math.abs(bus.v) * 3.6;
+  if (bus.signal && !bus.hazard) sigT[bus.signal] = t;   // 開著雙黃燈時別人看不出方向燈，不算
+  laneCool -= dt;
+
+  // 闖紅燈：車頭進入路口的瞬間判定
+  const hx = bg.x + bg.fx * 6, hz = bg.z + bg.fz * 6;
+  const hi = nodeOf(hx), hj = nodeOf(hz);
+  const inside = Math.abs(hx - hi * CELL) < ROAD_V[hi].half && Math.abs(hz - hj * CELL) < ROAD_H[hj].half;
+  const key = inside ? hi + ',' + hj : null;
+  if (key && key !== prevBox && hasLight(hi, hj) && bus.v > 1) {
+    if (lightState(hi, hj, Math.abs(bg.fx) > Math.abs(bg.fz) ? 0 : 1) === 'r') addMoney(-100, '闖紅燈');
+  }
+  prevBox = key;
+
+  // 超速
+  speedingT = kmh > LIMIT_KMH + 6 ? speedingT + dt : 0;
+  if (speedingT > 2) { addMoney(-20, '超速'); speedingT = 0; }
+
+  // 以下看車身中心在哪：路口範圍內，還是某一條路的路段上
+  const i = nodeOf(bg.x), j = nodeOf(bg.z), dx = bg.x - i * CELL, dz = bg.z - j * CELL;
+  const hv = ROAD_V[i].half, hh = ROAD_H[j].half;
+  const along = Math.abs(bg.fx) > Math.abs(bg.fz) ? { x: Math.sign(bg.fx), z: 0 } : { x: 0, z: Math.sign(bg.fz) };   // 車頭大致朝哪個方向
+  if (Math.abs(dx) < hv + NEAR && Math.abs(dz) < hh + NEAR) {
+    if (!zone) zone = { d: along, t };
+    lane = null; wrongT = 0;
+    return;
+  }
+  const vertical = Math.abs(dx) <= hv;   // 在縱向道路上（否則在橫向道路上）
+  const aligned = (vertical ? Math.abs(bg.fz) : Math.abs(bg.fx)) > 0.8;
+  const d = vertical ? { x: 0, z: Math.sign(bg.fz) || 1 } : { x: Math.sign(bg.fx) || 1, z: 0 };
+
+  // 剛離開路口：跟進路口時的方向比，轉了彎卻沒打方向燈就扣錢（進路口前 4 秒內打過就算）
+  if (zone) {
+    if (aligned) {
+      const cross = zone.d.x * d.z - zone.d.z * d.x;   // -1 左轉、+1 右轉、0 直行或迴轉
+      const side = cross < 0 ? 'L' : 'R';
+      if (cross !== 0 && bus.v > 0.5 && sigT[side] < zone.t - 4) addMoney(-30, (side === 'L' ? '左轉' : '右轉') + '未打方向燈');
+    }
+    zone = null;
+  }
+  if (!aligned || bus.v < 1.5) { wrongT = 0; return; }
+
+  // 離中線多遠（右側為正）與所在車道
+  const road = vertical ? ROAD_V[i] : ROAD_H[j];
+  const lat = vertical ? dx * -d.z : dz * d.x;
+  let now = lane;
+  if (now === null) {
+    now = lat < 0 ? -1 : road.n - 1;
+    for (let k = 0; k < road.n; k++) if (lat >= road.bounds[k] && lat < road.bounds[k + 1]) now = k;
+  } else {
+    // 車身中心越過車道線 0.6 公尺才算換了車道，貼著線走不會來回跳
+    const lo = now < 0 ? -Infinity : road.bounds[now], hi2 = now < 0 ? 0 : now >= road.n - 1 ? Infinity : road.bounds[now + 1];
+    if (lat < lo - 0.6) now--; else if (lat > hi2 + 0.6) now++;
+  }
+  if (lane !== null && now !== lane && now >= 0 && lane >= 0 && laneCool <= 0) {
+    const side = now < lane ? 'L' : 'R';
+    if (t - sigT[side] > 3) { addMoney(-20, '變換車道未打方向燈'); laneCool = 3; }
+  }
+  lane = now;
+
+  // 逆向：車身中心越過中線超過 0.3 公尺、持續 1.5 秒（大客車轉彎、閃違停車時短暫壓線不算）
+  if (lat < -0.3) {
+    wrongT += dt;
+    if (wrongT > 1.5) { addMoney(-60, '逆向行駛'); wrongT = -3; }
+  } else if (wrongT > 0) wrongT = 0;
+  else wrongT = Math.min(0, wrongT + dt);
+}

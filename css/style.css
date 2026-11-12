@@ -12,7 +12,8 @@ html, body {
   padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
 }
 #hudIn { position: relative; width: 100%; height: 100%; }
-.panel { background: rgba(14, 20, 30, .72); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; backdrop-filter: blur(6px); }
+/* 面板不用背景模糊：底下的 3D 畫面每一格都在變，模糊會讓手機的顯示晶片一直滿載、發燙 */
+.panel { background: rgba(14, 20, 30, .78); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
 
 /* ── 上排：左鏡｜資訊｜下一站｜小地圖｜圓鏡｜右鏡 ── */
 #hudIn { --mw: min(19vw, 210px); }   /* 後照鏡寬度；小螢幕要留位置給中間的資訊 */
@@ -27,14 +28,14 @@ html, body {
 #nextstop > div:last-child { min-width: 0; }
 #stopName, #nextstop .sub { overflow: hidden; text-overflow: ellipsis; }
 #arrow { flex: none; font-size: 20px; color: #ffd54a; width: 22px; text-align: center; }
-#nextstop .lbl { font-size: 9px; opacity: .65; letter-spacing: 2px; }
+#nextstop .lbl { font-size: 10.5px; color: #ffd54a; font-weight: 700; }
 #stopName { font-size: 16px; font-weight: 700; line-height: 1.15; }
 #nextstop .sub { font-size: 11.5px; opacity: .85; font-variant-numeric: tabular-nums; }
 #stopTimer.late { color: #ff6b6b; }
-#map { flex: none; width: min(9vw, 100px); height: min(9vw, 100px); border-radius: 10px; }
+#map { flex: none; width: min(11vw, 120px); height: min(11vw, 120px); border-radius: 10px; }
 
-/* 提示與訊息：左邊讓開方向燈（140px）、右邊讓開排檔與按鈕（262px），太長就換行 */
-#msgs { position: absolute; top: max(calc(var(--mw) * 0.5625 + 14px), 86px); left: 148px; right: 270px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+/* 提示與訊息：左邊讓開方向燈與喇叭（200px）、右邊讓開排檔與按鈕（262px），太長就換行 */
+#msgs { position: absolute; top: max(calc(var(--mw) * 0.5625 + 14px), 86px); left: 208px; right: 270px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 #hint { padding: 4px 12px; font-size: 13px; font-weight: 600; color: #ffe082; text-align: center; text-wrap: balance; line-height: 1.35; }
 #hint:empty { display: none; }
 #toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -43,19 +44,33 @@ html, body {
 .toast.bad { background: rgba(176, 42, 42, .94); }
 @keyframes pop { 0% { opacity: 0; transform: translateY(-8px); } 8%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 
-/* ── 儀表：檔位 / 時速 / 轉速 ── */
-#dash { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); padding: 5px 13px 7px; display: grid; grid-template-columns: auto auto; column-gap: 13px; align-items: center; }
-#gearBox { grid-row: span 2; width: 44px; height: 44px; border-radius: 9px; background: #0b1017; border: 2px solid #7fd4ff; display: grid; place-items: center; font-size: 27px; font-weight: 800; color: #7fd4ff; position: relative; }
-#gearBox.off { border-color: #ff6b6b; color: #ff6b6b; }
-#shiftTip { position: absolute; right: -11px; top: 50%; transform: translateY(-50%); font-size: 13px; color: #ffd54a; }
-#speedRow { display: flex; align-items: baseline; gap: 5px; }
-#kmh { font-size: 29px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; line-height: 1; }
+/* ── 中下：方向燈指示與雙黃燈在上；手煞車｜儀表（檔位 / 時速 / 半圓形轉速表）｜發動鈕在下 ── */
+/* 右邊的煞車油門比左邊的離合器寬 70px，所以整組往左偏 35px，兩側的按鈕離踏板一樣遠，才不會誤觸 */
+#center { position: absolute; bottom: 0; left: calc(50% - 35px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+#centerRow { display: flex; align-items: flex-end; gap: 7px; }
+#dash { padding: 4px 8px 3px; display: flex; align-items: flex-end; gap: 7px; }
+.gauge svg { display: block; width: 104px; height: 54px; }
+.needle { transform-origin: 60px 58px; transform: rotate(-90deg); }
+.needle line { stroke: #ff8a3c; stroke-width: 2.4; stroke-linecap: round; }
+.needle.red line { stroke: #ff3b3b; }
+.gval { text-align: center; font-size: 9.5px; opacity: .85; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.gval b { font-size: 12.5px; }
 #kmh.over { color: #ff6b6b; }
-#speedRow span { font-size: 11px; opacity: .7; }
-#tach { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #26303d 0 37%, #1f4a35 37% 65%, #26303d 65% 78%, #5a2020 78%); overflow: hidden; margin-top: 4px; }
-#tachBar { height: 100%; width: 0; background: #7fd4ff; }
-#tachBar.red { background: #ff5a5a; }
-#rpmTxt { font-size: 10px; opacity: .65; font-variant-numeric: tabular-nums; }
+#dashMid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 2px; }
+#gearBox { width: 40px; height: 40px; border-radius: 9px; background: #0b1017; border: 2px solid #7fd4ff; display: grid; place-items: center; font-size: 25px; font-weight: 800; color: #7fd4ff; position: relative; }
+#gearBox.off { border-color: #ff6b6b; color: #ff6b6b; }
+#shiftTip { position: absolute; right: -3px; top: -5px; font-size: 12px; color: #ffd54a; }
+/* 警示燈：平常暗著，亮起時紅色（下車鈴是黃色） */
+#warn { display: flex; gap: 3px; }
+#warn i { font-style: normal; font-size: 9px; font-weight: 800; width: 15px; height: 15px; line-height: 15px; text-align: center; border-radius: 4px; color: rgba(255,255,255,.22); background: rgba(255,255,255,.07); }
+#warn i.on { color: #fff; background: #d42a2a; }
+#wStop.on { background: #e6a200; color: #1b1300; }
+/* 手煞車與發動鈕：放在儀表兩側，離煞車、油門踏板遠一點才不會誤觸 */
+#hand, #ign { pointer-events: auto; width: 50px; height: 62px; border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .7); color: #8a8f98; font-size: 11px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; touch-action: none; }
+#hand b, #ign b { width: 28px; height: 28px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font-size: 16px; }
+#hand.on { color: #fff; border-color: #ff5a5a; background: rgba(176, 42, 42, .8); }
+#ign { color: #ffd54a; border-color: #ffd54a; }
+#ign.on { color: #2bff7a; border-color: rgba(43, 255, 122, .5); background: rgba(20, 70, 40, .6); }
 
 /* ── 左手：離合器。右手：排檔在上，煞車油門在下 ── */
 #left, #right { position: absolute; bottom: 0; display: flex; gap: 8px; pointer-events: auto; }
@@ -64,20 +79,16 @@ html, body {
 /* 方向燈撥桿：在方向盤左側，所以放左手 */
 #signals { display: flex; gap: 8px; }
 #signals button { width: 66px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 19px; touch-action: none; padding: 0; }
+#horn { width: 52px !important; font-size: 13px !important; font-weight: 700; color: #fff !important; }
+#horn.on { background: rgba(80, 160, 255, .6) !important; }
 #signals button.on { color: #2bff7a; border-color: #2bff7a; background: rgba(30, 110, 60, .55); }
 /* 儀表上方的指示燈與雙黃燈開關 */
-#lamps { position: absolute; bottom: 66px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+#lamps { display: flex; align-items: center; gap: 10px; }
 #lamps i { font-style: normal; font-size: 19px; color: rgba(255,255,255,.18); width: 22px; text-align: center; }
 #lamps i.on { color: #2bff7a; text-shadow: 0 0 8px #2bff7a; }
-#indP { font-size: 13px !important; font-weight: 800; border: 2px solid currentColor; border-radius: 50%; height: 22px; line-height: 18px; }
-#indP.on { color: #ff5a5a !important; text-shadow: none !important; }
 #hazard { pointer-events: auto; width: 46px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 90, 90, .7); background: rgba(60, 14, 14, .7); color: #ff6b6b; font-size: 17px; touch-action: none; padding: 0; }
 #hazard.on { border-color: #ff5a5a; }
 #hazard.lit { background: #d42a2a; color: #fff; }
-/* 手煞車：在排檔旁，所以放右手 */
-#hand { width: 52px; height: min(27vh, 104px); border-radius: 12px; border: 1px solid rgba(255,255,255,.28); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 11.5px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 0 7px; touch-action: none; }
-#hand b { width: 30px; height: 30px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font-size: 17px; }
-#hand.on { color: #fff; border-color: #ff5a5a; background: rgba(176, 42, 42, .75); }
 #right { right: 0; flex-direction: column; align-items: flex-end; }
 #pedals { display: flex; gap: 8px; align-items: flex-end; }
 .pedal {
@@ -92,8 +103,9 @@ html, body {
 /* 接合點刻度：踏板深度 25%~75% 之間是半離合 */
 #clutch::before, #clutch::after { content: ""; position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,.55); }
 #clutch::before { bottom: 67%; } #clutch::after { bottom: 22%; }
-#brake { height: min(27vh, 104px); } #brake i { background: rgba(255, 90, 90, .5); }
-#gas { height: min(31vh, 120px); } #gas i { background: rgba(80, 220, 140, .5); }
+/* 大客車的煞車踏板又寬又大，油門則是細長的一片 */
+#brake { width: 84px; height: min(29vh, 112px); } #brake i { background: rgba(255, 90, 90, .5); }
+#gas { width: 56px; height: min(32vh, 124px); } #gas i { background: rgba(80, 220, 140, .5); }
 #rightTop { display: flex; gap: 8px; align-items: stretch; }
 /* 拖曳式排檔：H 型排檔槽，圓鈕是排檔桿頭 */
 #shifter { position: relative; width: 200px; height: min(31vh, 120px); display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: 1fr 1fr; align-content: space-between; border-radius: 12px; background: rgba(14, 20, 30, .6); border: 1px solid rgba(255,255,255,.2); touch-action: none; }
@@ -113,7 +125,7 @@ html, body {
 #acts button:active { background: rgba(80, 160, 255, .6); }
 
 /* ── 開始畫面 ── */
-#start, #rotate { position: fixed; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .82); backdrop-filter: blur(4px); overflow: auto; }
+#start, #rotate { position: fixed; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .86); overflow: auto; }
 #start.hide { display: none; }
 #rotate { display: none; z-index: 9; font-size: 20px; font-weight: 700; text-align: center; background: #10141c; }
 @media (orientation: portrait) and (pointer: coarse) { #rotate { display: grid; } }
@@ -133,7 +145,7 @@ html, body {
 #levels .nm { font-size: 17px; font-weight: 800; }
 #levels .ds { font-size: 12.5px; opacity: .8; line-height: 1.45; }
 #levels .rc { font-size: 12.5px; color: #ffd54a; }
-#levelCancel { width: 100%; margin-top: 8px; padding: 10px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,.25); border-radius: 10px; background: transparent; color: #fff; }
+#levelCancel { width: 100%; margin-top: 8px; padding: 10px; font-size: 15px; font-weight: 700; border: 1px solid #2f8cff; border-radius: 10px; background: #2f8cff; color: #fff; }
 /* 暫停鈕與暫停／結算選單 */
 #sysBtns { display: flex; gap: 4px; pointer-events: auto; }
 #sysBtns button { flex: 1; min-width: 34px; height: 30px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .72); color: #fff; padding: 0; touch-action: none; display: grid; place-items: center; }
@@ -143,11 +155,11 @@ html, body {
 .card { position: relative; }
 #fsStart { position: absolute; top: 14px; right: 16px; padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 9px; border: 1px solid rgba(255,255,255,.25); background: #223046; color: #fff; }
 #pauseBtn { font-size: 15px; font-weight: 900; letter-spacing: 2px; padding-left: 2px !important; }
-#menu { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .78); backdrop-filter: blur(4px); overflow: auto; }
+#menu { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .84); overflow: auto; }
 .card.small { max-width: 440px; text-align: center; }
 #menuBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 #menuBtns button { padding: 11px 6px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,.2); border-radius: 10px; background: #223046; color: #fff; }
 #menuBtns button.main { grid-column: span 2; background: #2f8cff; border-color: #2f8cff; font-size: 17px; }
-#mSens { grid-column: span 2; }
+#mSens, #mGfx { grid-column: span 2; }
 #resStars { font-size: 34px; color: #ffd54a; letter-spacing: 4px; }
 #resText { margin: 4px 0 0; }

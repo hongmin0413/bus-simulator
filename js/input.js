@@ -1,11 +1,12 @@
 // 輸入：手機傾斜（方向盤）、觸控踏板與排檔、鍵盤
 import { clamp, $ } from './config.js';
-import { input, tilt, app, ORBIT0 } from './state.js';
-import { shift, canShift, onGear } from './engine.js';
+import { input, tilt, app } from './state.js';
+import { shift, canShift, onGear, ignition } from './engine.js';
 import { eng } from './state.js';
 import { toggleDoors, resetBus } from './service.js';
 import { toast } from './ui.js';
 import { toggleHand, setSignal, toggleHazard } from './signals.js';
+import { setHorn } from './audio.js';
 
 // ───────── 旋轉手機 = 方向盤 ─────────
 // 用重力在螢幕平面上的方向算出手機被轉了幾度，不受手機前後仰角影響
@@ -39,16 +40,18 @@ addEventListener('orientationchange', () => { tilt.needCal = true; });
 // ───────── 鍵盤 ─────────
 const PEDAL = { KeyW: 'gas', ArrowUp: 'gas', KeyS: 'brake', ArrowDown: 'brake', ShiftLeft: 'clutch', ShiftRight: 'clutch' };
 const HOLD = { KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
-const cycleCam = () => { app.camMode = (app.camMode + 1) % 2; Object.assign(app.orbit, ORBIT0); };   // 0 駕駛座、1 車外（每次切換都回到正後方）
+const cycleCam = () => { app.camMode = (app.camMode + 1) % 2; };   // 0 駕駛座、1 車外（車外視角的角度與遠近會記住，切回來還在原位）
 addEventListener('keydown', (e) => {
   if (PEDAL[e.code]) { held[PEDAL[e.code]] = true; byKey[PEDAL[e.code]] = true; e.preventDefault(); return; }
   if (HOLD[e.code]) { input[HOLD[e.code]] = true; e.preventDefault(); return; }
+  if (e.code === 'KeyG') { if (app.running && !app.paused) setHorn(true); return; }   // 喇叭：按住才響
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat || !app.running) return;
   if (e.code === 'Space') toggleHand();
   else if (e.code === 'KeyQ') setSignal('L');
   else if (e.code === 'KeyE') setSignal('R');
   else if (e.code === 'KeyH') toggleHazard();
+  else if (e.code === 'Enter') ignition(true);
   const m = /^Digit([1-6])$/.exec(e.code);
   if (m) shift(m[1]);
   else if (e.code === 'KeyR') shift('R');
@@ -61,8 +64,10 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => {
   if (PEDAL[e.code]) held[PEDAL[e.code]] = false;
   if (HOLD[e.code]) input[HOLD[e.code]] = false;
+  if (e.code === 'KeyG') setHorn(false);
+  if (e.code === 'Enter') ignition(false);
 });
-addEventListener('blur', () => { held.gas = held.brake = held.clutch = false; input.left = input.right = false; });
+addEventListener('blur', () => { held.gas = held.brake = held.clutch = false; input.left = input.right = false; setHorn(false); });
 
 // 鍵盤踩踏板：按住越久踩越深，放開後慢慢回彈（每秒變化量：[踩下, 放開]）
 // 離合器只在這裡設定目標，實際的快踩與慢放由 engine.js 依轉速處理
@@ -164,32 +169,50 @@ document.querySelectorAll('#acts button').forEach((b) => {
   });
 });
 
-// 方向燈（左手）、雙黃燈（儀表上方）、手煞車（右手）
+// 方向燈（左手）、雙黃燈（儀表上方）、手煞車與發動鈕（儀表兩側）
 const tap = (el, fn) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
-document.querySelectorAll('#signals button').forEach((b) => tap(b, () => setSignal(b.dataset.sig)));
+document.querySelectorAll('#signals [data-sig]').forEach((b) => tap(b, () => setSignal(b.dataset.sig)));
+// 喇叭：按住才響，手指放開或滑出去就停
+{
+  const b = $('horn');
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (app.running && !app.paused) { setHorn(true); b.classList.add('on'); } });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { setHorn(false); b.classList.remove('on'); });
+}
 tap($('hazard'), toggleHazard);
 tap($('hand'), toggleHand);
+// 發動鈕：按住到引擎點著才放；手指放開或滑出去就算放開
+tap($('ign'), () => ignition(true));
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('ign').addEventListener(ev, () => ignition(false));
 
-// 在畫面上拖曳：車外視角時是繞著公車轉動鏡頭；駕駛座視角且沒有傾斜感應器時是轉方向盤
+// 在畫面上拖曳：車外視角時是繞著公車轉動鏡頭（兩指捏合或滑鼠滾輪可拉近拉遠）；駕駛座視角且沒有傾斜感應器時是轉方向盤
 {
-  const cv = $('c');
-  let sx = 0, sy = 0, id = null, mode = '';
+  const cv = $('c'), pts = new Map();   // 車外視角時按在畫面上的手指
+  const zoom = (k) => { app.orbit.dist = clamp(app.orbit.dist * k, 9, 80); };
+  const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  let sx = 0, id = null, pinch = 0;
   cv.addEventListener('pointerdown', (e) => {
-    if (!app.running || id !== null) return;
-    if (app.camMode === 1) mode = 'orbit'; else if (!tilt.active) mode = 'steer'; else return;
-    id = e.pointerId; sx = e.clientX; sy = e.clientY;
-    if (mode === 'orbit') app.orbit.drag = true; else input.drag = 0;
+    if (!app.running) return;
+    if (app.camMode === 1) {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      app.orbit.drag = true;
+      if (pts.size === 2) pinch = spread();
+    } else if (!tilt.active && id === null) { id = e.pointerId; sx = e.clientX; input.drag = 0; }
   });
   cv.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== id) return;
-    if (mode === 'orbit') {
-      app.orbit.yaw -= (e.clientX - sx) * 0.009;
-      app.orbit.pitch = clamp(app.orbit.pitch + (e.clientY - sy) * 0.006, 0.06, 1.25);
-      sx = e.clientX; sy = e.clientY;
-    } else input.drag = clamp((e.clientX - sx) / 110, -1, 1);
+    const p = pts.get(e.pointerId);
+    if (p) {
+      if (pts.size === 1) {
+        app.orbit.yaw -= (e.clientX - p.x) * 0.009;
+        app.orbit.pitch = clamp(app.orbit.pitch + (e.clientY - p.y) * 0.006, 0.06, 1.35);
+      }
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2) { const s = spread(); if (pinch > 0 && s > 0) zoom(pinch / s); pinch = s; }
+    } else if (e.pointerId === id) input.drag = clamp((e.clientX - sx) / 110, -1, 1);
   });
   for (const ev of ['pointerup', 'pointercancel']) cv.addEventListener(ev, (e) => {
-    if (e.pointerId !== id) return;
-    id = null; app.orbit.drag = false; input.drag = null;
+    pts.delete(e.pointerId);
+    if (!pts.size) app.orbit.drag = false;
+    if (e.pointerId === id) { id = null; input.drag = null; }
   });
+  cv.addEventListener('wheel', (e) => { if (app.running && app.camMode === 1) { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)); } }, { passive: false });
 }
