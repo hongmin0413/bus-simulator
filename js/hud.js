@@ -107,7 +107,7 @@ export function updateHud() {
   const s = stops[game.next], kmh = Math.round(Math.abs(bus.v) * 3.6);
   text('money', '$' + game.money);
   text('pax', `${game.onboard.length}/${CAP}`);
-  text('stopNo', `下一站 · 第 ${game.next + 1}/${stops.length} 站${game.next === 0 ? '（起點）' : ''}`);
+  text('stopNo', game.next === 0 ? `起點 1/${stops.length}` : `第 ${game.next + 1}/${stops.length} 站`);
   text('stopName', s.name);
   text('stopDist', Math.round(zone.dist) + ' m');
   const t = Math.ceil(Math.abs(game.timeLeft)), late = game.timeLeft < 0;
@@ -141,6 +141,8 @@ export function updateHud() {
   cls('ign', 'crank', eng.crank > 0);
   cls('wPark', 'on', bus.hand);
   cls('wDoor', 'on', bus.doors);
+  cls('doorBtn', 'on', bus.doors);
+  cls('wiperBtn', 'on', bus.wiper);
   cls('wStop', 'on', game.bell);
 
   const tx = s.x - bg.x, tz = s.z - bg.z;

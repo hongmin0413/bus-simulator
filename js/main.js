@@ -1,6 +1,6 @@
 // 進入點：關卡選單、暫停選單、主迴圈
 import { CELL, EDGE, ROAD_V, ROAD_H, $ } from './config.js';
-import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt } from './state.js';
+import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, ORBIT0 } from './state.js';
 import { renderer, updateLights, beam, stops, ROUTE_NODES, buildRoute } from './world.js';
 import { updateBus, syncBusMesh } from './bus.js';
 import { setGear, shift, startEngine } from './engine.js';
@@ -23,13 +23,10 @@ const store = {
 const best = store.get('bus-best', {});
 const SENS_NAME = ['低', '中', '高'];
 app.sens = [0, 1, 2].includes(store.get('bus-sens', 1)) ? store.get('bus-sens', 1) : 1;
-// 畫面：省電（每秒 30 格、解析度較低，手機比較不燙）／流暢（每秒 60 格）。有觸控螢幕的裝置預設省電
-const GFX_NAME = ['省電', '流暢'], GFX = [{ fps: 30, dpr: 1.25 }, { fps: 60, dpr: 1.5 }];
-app.gfx = [0, 1].includes(store.get('bus-gfx')) ? store.get('bus-gfx') : navigator.maxTouchPoints > 0 ? 0 : 1;
-function applyGfx() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio, GFX[app.gfx].dpr));
-  layout();
-}
+// 每秒最多 60 格、解析度上限 1.5 倍：很多手機螢幕是 90／120 Hz，不限制的話顯示晶片會一直全速運轉、發燙
+const FPS = 60;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+app.muted = store.get('bus-muted', false) === true;
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
 // ───────── 關卡 ─────────
@@ -39,7 +36,7 @@ function loadLevel(n) {
   app.level = n;
   buildRoute(L);
   Object.assign(game, { money: 0, served: 0, onboard: [], service: null, timeMul: L.timeMul, lapDone: false });
-  Object.assign(bus, { doors: false, doorT: 0, jolt: 0, roll: 0, steerFrac: 0, hand: true, signal: null, hazard: false, blink: false });
+  Object.assign(bus, { doors: false, doorT: 0, jolt: 0, roll: 0, brakeP: 0, wiper: false, wiperT: 0, steerFrac: 0, hand: true, signal: null, hazard: false, blink: false });
   Object.assign(eng, { clutch: 0, rpm: 0, on: false, thr: 0, crank: 0 });   // 開場引擎是熄火的，要踩離合器按「發動」
   input.gas = input.brake = input.clutch = 0;
   // 起點：路線第一個路口往東 24 公尺、最外側車道
@@ -88,6 +85,9 @@ async function startLevel(n) {
   initAudio();
   if (!tiltReady) { tiltReady = true; await enableTilt(); }
   loadLevel(n);
+  // 每次開始（含重新開始）都回到駕駛座視角，車外視角也回到正後方
+  app.camMode = 0;
+  Object.assign(app.orbit, ORBIT0);
   $('levelCancel').hidden = true;
   $('start').classList.add('hide');
   $('menu').hidden = true;
@@ -111,10 +111,10 @@ function openMenu(mode) {
   const result = mode === 'result';
   $('menuTitle').textContent = result ? '完成一圈！' : '暫停';
   // 結算畫面只留「重新開始」「選擇關卡」
-  $('mResume').hidden = $('mSens').hidden = $('mGfx').hidden = result;
+  $('mResume').hidden = $('mSens').hidden = $('mSound').hidden = result;
   $('result').hidden = !result;
   $('mSens').textContent = '轉向靈敏度：' + SENS_NAME[app.sens];
-  $('mGfx').textContent = '畫面：' + GFX_NAME[app.gfx];
+  $('mSound').textContent = '聲音：' + (app.muted ? '關' : '開');
   $('menu').hidden = false;
 }
 function closeMenu() {
@@ -161,11 +161,10 @@ function toggleFull() {
 document.querySelectorAll('.fsToggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); toggleFull(); }));
 // 瀏覽器規定全螢幕要由點擊觸發，所以開啟網頁後第一次點畫面時就進全螢幕
 document.addEventListener('click', () => { if (wantFull) goFull(); }, { once: true });
-$('mGfx').addEventListener('click', () => {
-  app.gfx = (app.gfx + 1) % 2;
-  store.set('bus-gfx', app.gfx);
-  $('mGfx').textContent = '畫面：' + GFX_NAME[app.gfx];
-  applyGfx();
+$('mSound').addEventListener('click', () => {
+  app.muted = !app.muted;
+  store.set('bus-muted', app.muted);
+  $('mSound').textContent = '聲音：' + (app.muted ? '關' : '開');
 });
 $('mSens').addEventListener('click', () => {
   app.sens = (app.sens + 1) % 3;
@@ -199,8 +198,7 @@ function tick(dt) {
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  // 限制每秒格數：很多手機螢幕是 90／120 Hz，不限制的話顯示晶片會一直全速運轉、發燙
-  if (now - last < 1000 / GFX[app.gfx].fps - 3) return;
+  if (now - last < 1000 / FPS - 3) return;   // 限制每秒格數
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (app.running && !app.paused) {
@@ -215,7 +213,7 @@ function frame(now) {
 }
 
 loadLevel(0);   // 選單後面先放一個場景當背景
-applyGfx();
+layout();
 renderLevels();
 $('loading').hidden = true;
 requestAnimationFrame(frame);

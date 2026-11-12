@@ -8,7 +8,7 @@ import { addMoney } from './ui.js';
 import { sfx } from './audio.js';
 import { updateSignals, lampOn } from './signals.js';
 import { peds, finishCrossing } from './peds.js';
-import { updateRules } from './rules.js';
+import { updateRules, updateComfort } from './rules.js';
 
 // 車身尺寸取甲類大客車（12 公尺級市區公車）常見的數值：長 12、寬 2.5、高約 3.5（含車頂冷氣）、軸距 6、前懸 2.7、後懸 3.3 公尺
 // 原點在後軸中心。區域 +z 為車頭，+x 為左側（駕駛座），-x 為右側（車門）
@@ -20,7 +20,8 @@ ext.position.z = cabin.position.z = BODY_Z;
 busMesh.add(ext, cabin);
 const brakeMat = basic(0x661111);
 const sigMat = { L: basic(0x6a4a00), R: basic(0x6a4a00) };
-const doorMeshes = [], frontWheels = [];
+const doorMeshes = [], frontWheels = [], wipers = [];
+const WIPER_REST = -1.45, WIPER_SWEEP = 1.75;   // 雨刷橫躺的角度、一次擺多少（弧度）
 let steeringWheel;
 {
   // 不會動的方塊先收集起來，最後各合併成一個幾何體（車外一個、駕駛艙一個），減少手機的繪圖負擔
@@ -112,6 +113,15 @@ let steeringWheel;
   C.push([0.08, 2.6, 0.1, -1.24, 2.05, 7.02, DARK], [0.06, 0.55, 1.85, -1.245, 0.72, 8.0, TRIM], [0.06, 0.08, 1.85, -1.245, 2.0, 8.0, DARK]);
   C.push([0.045, 2.3, 0.045, -0.5, 2.15, 7.1, YELLOW], [0.3, 0.75, 0.3, -0.3, 1.4, 8.05, GREY], [0.32, 0.06, 0.32, -0.3, 1.8, 8.05, YELLOW]);
   cabin.add(new THREE.Mesh(boxGeo(C), vcMat));
+  // 雨刷：兩支，軸在擋風玻璃下緣，平常橫躺著
+  const wiperGeo = boxGeo([[0.035, 0.9, 0.02, 0, 0.45, 0, 0x08090b], [0.05, 0.5, 0.03, 0, 0.55, 0, 0x08090b]]);
+  for (const x of [0.2, -0.75]) {
+    const wp = new THREE.Mesh(wiperGeo, vcMat);
+    wp.position.set(x, 1.6, 8.93);
+    wp.rotation.z = WIPER_REST;
+    cabin.add(wp);
+    wipers.push(wp);
+  }
   // 方向盤：大客車的方向盤又大又平，像端著一個盤子
   const pivot = new THREE.Group();
   // 位置比真車離駕駛遠一點、高一點，這樣直視前方時畫面下緣還看得到方向盤的上半圈
@@ -141,7 +151,7 @@ function blocked(x, z, h) {
 // 轉向靈敏度（低、中、高）：手機轉幾弧度打到底，約 32、23、16 度
 export const SENS = [0.55, 0.4, 0.28];
 const MAX_STEER = 0.85;
-let pedCool = 0, hitCooldown = 0, wasBraking = false;
+let pedCool = 0, hitCooldown = 0, peakP = 0, prevBrk = 0;
 function crash(text) {
   const hard = Math.abs(bus.v) > 1.5;
   bus.v = -bus.v * 0.25;
@@ -165,7 +175,9 @@ export function updateBus(dt) {
   bus.steer = Math.sign(bus.steerFrac) * Math.abs(bus.steerFrac) ** 1.15 * MAX_STEER / (1 + Math.abs(bus.v) * 0.045);
 
   // 縱向：引擎（經離合器）+ 煞車 + 阻力
-  const hand = bus.hand || bus.doors, brk = input.brake;
+  // 氣壓煞車：踩下踏板後氣壓要一點時間才建立起來（約 0.2 秒到全力），放開也不是瞬間洩完
+  bus.brakeP += clamp(input.brake - bus.brakeP, -7 * dt, 5 * dt);
+  const hand = bus.hand || bus.doors, brk = bus.brakeP;
   const v0 = bus.v;
   const engA = updateEngine(dt);
   // 手煞車（與開門時的連鎖煞車）只作用在後軸：行進間拉起的減速度比腳煞車小，車停住後才鎖得住引擎的推力
@@ -177,7 +189,7 @@ export function updateBus(dt) {
   // 風阻：風阻係數 0.65、迎風面積 7.5 平方公尺，力道 = 2.93 × v²，除以空車 12 噸；車越重越不容易被風拖慢
   if (Math.abs(bus.v) > 0.02) a -= Math.sign(bus.v) * (brakeA + 0.09) + bus.v * Math.abs(bus.v) * 0.000244 * load;
   bus.v += a * dt;
-  const braking = brk > 0 || hand;
+  const braking = brk > 0.02 || hand;
   if (v0 !== 0 && v0 * bus.v < 0 && (braking || Math.abs(engA) < 0.05)) bus.v = 0;
   if (braking && Math.abs(bus.v) < 0.15 && Math.abs(engA) < brakeA) bus.v = 0;
   if (Math.abs(bus.v) < 0.03 && Math.abs(engA) < 0.01) bus.v = 0;
@@ -187,8 +199,11 @@ export function updateBus(dt) {
   // 轉彎時車身往外側傾斜：側向加速度每 1 m/s² 傾約 0.7 度，最多 2.5 度（右轉時往左倒，roll 為正）
   const latAcc = (bus.v * bus.v / WHEELBASE) * Math.tan(bus.steer);
   bus.roll += (clamp(latAcc * 0.012, -0.045, 0.045) - bus.roll) * Math.min(1, dt * 4);
-  if (wasBraking && !braking && Math.abs(bus.v) < 0.1) sfx.air(0.35); // 放開煞車的洩氣聲
-  wasBraking = braking;
+  // 放開煞車踏板：煞車氣室的氣從排氣閥噴出來，「嘶」一聲，踩得越重聲音越大
+  peakP = Math.max(peakP, brk);
+  if (input.brake === 0 && prevBrk > 0) { if (peakP > 0.15) sfx.air(0.2 + 0.35 * peakP, 0.05 + 0.13 * peakP); peakP = 0; }
+  prevBrk = input.brake;
+  updateComfort(dt, hitCooldown > 1.3);
 
   const nh = bus.h - (bus.v / WHEELBASE) * Math.tan(bus.steer) * dt;
   const nx = bus.x + Math.sin(nh) * bus.v * dt, nz = bus.z + Math.cos(nh) * bus.v * dt;
@@ -240,6 +255,15 @@ export function updateBus(dt) {
   doorMeshes.forEach((d) => (d.position.z = d.userData.z - bus.doorT * 1.25));
   frontWheels.forEach((w) => (w.rotation.y = -bus.steer));
   steeringWheel.rotation.z = bus.steerFrac * Math.PI * 6;   // 方向盤左右各三圈
+  // 雨刷：開著就一直來回擺；關掉後擺完這一趟回到原位才停
+  if (bus.wiper || bus.wiperT > 0) {
+    const before = bus.wiperT;
+    bus.wiperT += dt / 1.3;
+    if (before < 0.5 && bus.wiperT >= 0.5) sfx.wiper();
+    if (bus.wiperT >= 1) { bus.wiperT = bus.wiper ? bus.wiperT - 1 : 0; sfx.wiper(); }
+    const ang = WIPER_REST + (1 - Math.cos(bus.wiperT * 2 * Math.PI)) / 2 * WIPER_SWEEP;
+    for (const wp of wipers) wp.rotation.z = ang;
+  }
   brakeMat.color.setHex(braking ? 0xff2020 : 0x661111);
   updateSignals(dt);
   for (const side of ['L', 'R']) sigMat[side].color.setHex(lampOn(side) ? 0xffb000 : 0x6a4a00);

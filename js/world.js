@@ -8,7 +8,7 @@ import { app } from './state.js';
 
 export { THREE };
 
-// 手機很容易發燙，所以解析度不開太高（省電模式再降，見 main.js 的 applyGfx）
+// 手機很容易發燙，所以解析度不開太高（上限在 main.js 設定）
 export const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 export const scene = new THREE.Scene();

@@ -15,7 +15,7 @@ function restart() {
 export function toggleHand() {
   if (!app.running) return;
   bus.hand = !bus.hand;
-  if (bus.hand) sfx.air(0.3);   // 放開時的洩氣聲由 bus.js 處理
+  if (bus.hand) sfx.air(0.7, 0.2);   // 拉起手煞車：彈簧煞車氣室把氣排掉，很大的一聲「噗嘶——」   // 放開時的洩氣聲由 bus.js 處理
 }
 export function setSignal(side) {
   if (!app.running) return;

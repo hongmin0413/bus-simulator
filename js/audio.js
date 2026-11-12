@@ -144,7 +144,12 @@ export function initAudio() {
       o.type = type; o.frequency.value = f; o.connect(gainNode(v, chop)); o.start();
     }
 
-    n = { engine, roadGain, roadLP, windGain, starterGain };
+    // 煞車尖叫聲：低速踩煞車時來令片摩擦的高音。在車外，所以經過「車廂」那一層
+    const squealGain = gainNode(0, cabinLP), sq = ctx.createOscillator();
+    sq.type = 'triangle'; sq.frequency.value = 2350; sq.connect(squealGain); sq.start();
+    noiseSource().connect(filter('bandpass', 2600, 6, gainNode(0.5, squealGain)));
+
+    n = { engine, roadGain, roadLP, windGain, starterGain, squealGain };
   } catch { ctx = null; n = null; }
 }
 
@@ -164,6 +169,8 @@ export function updateAudio(dt) {
   set(cabinGain.gain, inside ? 0.4 : 0.7, 0.15);
   setEngine(n.engine, eng.rpm, eng.on ? eng.thr : 0, eng.on, set);
   set(n.starterGain.gain, eng.crank > 0 ? 0.16 : 0, 0.015);
+  const v = Math.abs(bus.v);
+  set(n.squealGain.gain, bus.brakeP > 0.12 && v > 0.4 && v < 4.5 ? 0.035 * Math.min(1, bus.brakeP * 2) : 0, 0.08);
   const sp = Math.abs(bus.v);
   set(n.roadGain.gain, clamp(sp / 18, 0, 1) * 0.09, 0.1);
   set(n.roadLP.frequency, 180 + sp * 28, 0.1);
@@ -222,10 +229,11 @@ export function setHorn(on) {
 }
 
 export const sfx = {
-  air(len = 0.45) { burst('highpass', 2600, len, 0.14); },                    // 氣煞 / 氣動門洩氣
+  air(len = 0.45, vol = 0.14) { burst('highpass', 2600, len, vol); },                    // 氣煞 / 氣動門洩氣
   shift() { tone('triangle', 150, 70, 0.07, 0.2); burst('bandpass', 900, 0.05, 0.08); },
   grind() { for (let k = 0; k < 6; k++) tone('sawtooth', 210 + k * 9, 180, 0.05, 0.1, k * 0.045); },
   bell() { tone('sine', 1320, 1320, 0.5, 0.28); tone('sine', 1050, 1050, 0.7, 0.28, 0.28); },   // 下車鈴：叮咚
+  wiper() { burst('lowpass', 500, 0.09, 0.07); },   // 雨刷擺到底換向的悶響
   purge() { burst('highpass', 3200, 0.5, 0.12); },   // 空氣乾燥器排氣
   // 方向燈繼電器的喀、噠聲：要比引擎聲明顯
   tick(hi) { burst('bandpass', hi ? 2600 : 1900, 0.04, 0.6); tone('square', hi ? 1500 : 1150, hi ? 1300 : 1000, 0.03, 0.22); },

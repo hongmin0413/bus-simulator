@@ -1,6 +1,6 @@
 // 輸入：手機傾斜（方向盤）、觸控踏板與排檔、鍵盤
 import { clamp, $ } from './config.js';
-import { input, tilt, app } from './state.js';
+import { input, tilt, app, bus } from './state.js';
 import { shift, canShift, onGear, ignition } from './engine.js';
 import { eng } from './state.js';
 import { toggleDoors, resetBus } from './service.js';
@@ -59,6 +59,7 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'KeyF') toggleDoors();
   else if (e.code === 'KeyC') cycleCam();
   else if (e.code === 'Backspace') resetBus();
+  else if (e.code === 'KeyX') toggleWiper();
   else if (e.code === 'KeyM') { app.muted = !app.muted; toast(app.muted ? '已靜音' : '已開啟聲音'); }
 });
 addEventListener('keyup', (e) => {
@@ -186,14 +187,17 @@ bindPedal('clutch', 'clutch', 0);
     let y = knob.ty;
     const want = y < -IN ? TOP[knob.col] : y > IN ? BOT[knob.col] : Math.abs(y) < OUT ? 'N' : null;
     if (want && want !== eng.gear) {
-      if (want === 'N') shift('N');
+      if (want === 'N') {
+        if (canShift('N')) shift('N');
+        else { if (!knob.warned) { shift('N'); knob.warned = true; } y = Math.sign(y) * (OUT + 0.04); }   // 還在出力：拉不出來
+      }
       else if (canShift(want)) { shift(want); knob.tx = knob.col; }   // 入檔：以手指現在的位置重新對準這一排
       else {
         if (!knob.warned) { shift(want); knob.warned = true; }   // 只提示一次：打齒聲與原因
         y = Math.sign(y) * STOP;                                  // 被擋住：只能離開中間一點點
       }
     }
-    if (Math.abs(y) < 0.25) knob.warned = false;
+    if (Math.abs(y) < 0.25 || Math.abs(y) > IN + 0.2) knob.warned = false;
     knob.x = eng.gear === 'N' ? knob.tx : knob.col;
     knob.y = y;
     draw();
@@ -206,15 +210,8 @@ bindPedal('clutch', 'clutch', 0);
   });
   draw();
 }
-document.querySelectorAll('#acts button').forEach((b) => {
-  b.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    const a = b.dataset.act;
-    if (a === 'door') toggleDoors();
-    else if (a === 'cam') cycleCam();
-    else calibrate(false);
-  });
-});
+// 雨刷開關
+function toggleWiper() { if (app.running) bus.wiper = !bus.wiper; }
 
 // 方向燈（左手）、雙黃燈（儀表上方）、手煞車與發動鈕（儀表兩側）
 const tap = (el, fn) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
@@ -227,6 +224,10 @@ document.querySelectorAll('#signals [data-sig]').forEach((b) => tap(b, () => set
 }
 tap($('hazard'), toggleHazard);
 tap($('hand'), toggleHand);
+tap($('doorBtn'), toggleDoors);
+tap($('wiperBtn'), toggleWiper);
+tap($('camBtn'), cycleCam);
+tap($('calBtn'), () => calibrate(false));
 // 發動鈕：按住到引擎點著才放；手指放開或滑出去就算放開
 {
   // 只有「同一根手指真的放開」才算放開。手機上長按時，系統可能會送出 pointercancel（長按選單、螢幕底部的系統手勢），
@@ -245,7 +246,7 @@ tap($('hand'), toggleHand);
 // 在畫面上拖曳：車外視角時是繞著公車轉動鏡頭（兩指捏合或滑鼠滾輪可拉近拉遠）；駕駛座視角且沒有傾斜感應器時是轉方向盤
 {
   const cv = $('c'), pts = new Map();   // 車外視角時按在畫面上的手指
-  const zoom = (k) => { app.orbit.dist = clamp(app.orbit.dist * k, 9, 80); };
+  const zoom = (k) => { app.orbit.dist = clamp(app.orbit.dist * k, 9, 34); };   // 最遠到看得見整個路口左右，再遠車子太小沒有意義
   const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
   let sx = 0, id = null, pinch = 0;
   cv.addEventListener('pointerdown', (e) => {

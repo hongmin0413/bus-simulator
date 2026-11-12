@@ -2,7 +2,7 @@
 import { $, BODY_Z } from './config.js';
 import { THREE, renderer, scene, camera } from './world.js';
 import { ext, cabin } from './bus.js';
-import { bus, app, busCenter } from './state.js';
+import { bus, eng, app, busCenter } from './state.js';
 
 // ───────── 主鏡頭：0 = 駕駛座（左駕）, 1 = 車外（可拖曳繞著看、捏合縮放） ─────────
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3();
@@ -40,6 +40,14 @@ const MIRRORS = [
   // 車頭右前角的廣角圓鏡（大客車的前方下視鏡）：照車頭正前方與右前角的死角，看得到保險桿、前門和緊貼車頭的人車
   { id: 'mirC', res: [200, 200], fov: 105, pos: [-1.75, 3.0, 9.9], look: [0.2, 0, 9.0], round: true },
 ];
+// 行車視野輔助畫面（真車的倒車顯影與轉彎時的側邊影像）：倒車時拍車後、打方向燈時拍那一側，其他時候不顯示、也不拍
+const MONITOR = {
+  rear: { txt: '後方', fov: 100, pos: [0, 2.9, -3.2], look: [0, 0.2, -9] },
+  L: { txt: '左側', fov: 88, pos: [1.5, 2.7, 8.8], look: [2.6, 0.1, 1.0] },
+  R: { txt: '右側', fov: 88, pos: [-1.5, 2.7, 8.8], look: [-2.6, 0.1, 1.0] },
+};
+const mon = { id: 'monitor', res: [256, 144], fov: 100, monitor: true, mode: null };
+MIRRORS.push(mon);
 const overlay = new THREE.Scene();
 const ortho = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
 for (const m of MIRRORS) {
@@ -76,11 +84,30 @@ function local(p, out) {
 
 let frameNo = 0;
 const ORDER = ['mirL', 'mirR', 'mirL', 'mirR', 'mirC'];
+// 現在該顯示哪個輔助畫面：倒車優先，其次是打著的方向燈（開雙黃燈不算）
+function monitorMode() {
+  if (!app.running) return null;
+  if (eng.gear === 'R') return 'rear';
+  return bus.signal && !bus.hazard ? bus.signal : null;
+}
 export function render(dt) {
   updateCamera(dt);
   // 後照鏡很吃效能（每面鏡子都要把場景再畫一次），所以每格畫面只更新其中一面：左、右、左、右、圓鏡輪流
+  const mode = monitorMode();
+  if (mode !== mon.mode) {
+    mon.mode = mode;
+    mon.el.hidden = !mode;
+    if (mode) { $('monitorTxt').textContent = MONITOR[mode].txt; mon.cam.fov = MONITOR[mode].fov; }
+    layout();   // 畫面出現或消失後，貼圖的位置要重算
+  }
   if (app.running) {
     ext.visible = true; cabin.visible = false;
+    if (mode && mon.quad.visible) {
+      local(MONITOR[mode].pos, mon.cam.position);
+      mon.cam.lookAt(local(MONITOR[mode].look, tmpV));
+      renderer.setRenderTarget(mon.rt);
+      renderer.render(scene, mon.cam);
+    }
     const turn = ORDER[frameNo++ % ORDER.length];
     for (const m of MIRRORS) {
       if (!m.quad.visible || m.id !== turn) continue;

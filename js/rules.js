@@ -1,4 +1,4 @@
-// 交通違規判定：闖紅燈、超速、逆向、轉彎或變換車道沒打方向燈、進站出站沒打方向燈。全部用公車的格子座標（bg）判斷
+// 交通違規與行車平順度判定：闖紅燈、超速、逆向、轉彎或變換車道沒打方向燈、進站出站沒打方向燈。全部用公車的格子座標（bg）判斷
 import { CELL, LIMIT_KMH, ROAD_V, ROAD_H, nodeOf, hasLight } from './config.js';
 import { lightState } from './world.js';
 import { bus, bg, app } from './state.js';
@@ -11,7 +11,28 @@ let lane = null;        // 目前在第幾個車道（由內往外，-1 = 壓到
 const sigT = { L: -99, R: -99 };   // 左、右方向燈最後一次亮著的時間
 let departT = null;     // 在站牌關門的時間；之後起步時要檢查有沒有打左燈。不在等起步時為 null
 
+// ── 行車平順度：車上有站著的乘客，頓一下就會站不穩 ──
+// 數值是參考一般說法估的：公車平常的加減速約 1～1.5 m/s²，超過 2.5～3 站著的人就抓不住
+let hardT = 0, comfortCool = 0, prevV = 0, prevA = 0;
+// hit：這一格有沒有發生碰撞（碰撞另外扣錢，不算在這裡）。判斷用的是 bus.jolt：平滑過（約 0.1 秒）的加減速度
+export function updateComfort(dt, hit) {
+  comfortCool -= dt;
+  const a = bus.jolt, v = bus.v;
+  let why = '';
+  if (hit) hardT = 0;
+  else if (Math.abs(prevV) > 0.02 && v === 0 && prevA < -STOP_JOLT) why = '煞停太頓';   // 車停住前的那一刻還踩得很重，乘客會往前撲
+  else if (Math.abs(a) > SPIKE) why = a < 0 ? '急煞' : '起步或換檔太猛';               // 瞬間的一大下：離合器放太快、轉速沒對上、重踩煞車
+  else {
+    hardT = Math.abs(a) > HARD ? hardT + dt : 0;                                          // 持續的大加減速
+    if (hardT > 0.5) why = a < 0 ? '急煞' : '急加速';
+  }
+  if (why && comfortCool <= 0) { addMoney(-10, why + '，乘客站不穩'); comfortCool = 4; hardT = 0; }
+  prevV = v; prevA = a;
+}
+const STOP_JOLT = 2.4, SPIKE = 4.2, HARD = 3;
+
 export function resetRules() {
+  hardT = 0; comfortCool = 0; prevV = 0; prevA = 0;
   prevBox = null; speedingT = 0; wrongT = 0; laneCool = 0; zone = null; lane = null; departT = null;
   sigT.L = sigT.R = -99;
 }

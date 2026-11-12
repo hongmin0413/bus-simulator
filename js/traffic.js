@@ -50,11 +50,14 @@ function buildMesh(kind, flashing) {
     ]);
     if (kind === 'truck') return boxGeo([
       [1.9, 1.35, 1.5, 0, 1.15, 1.75, paint], [1.75, 0.55, 0.1, 0, 1.45, 2.5, GLASS],   // 車頭
-      [2.0, 0.55, 3.5, 0, 0.85, -0.8, 0x2f6fbf], [1.95, 0.4, 4.6, 0, 0.35, 0, DARK],    // 貨斗、底盤
+      [2.0, 0.55, 3.5, 0, 0.85, -0.8, 0x2f6fbf], [1.9, 0.3, 4.6, 0, 0.45, 0, DARK],    // 貨斗、底盤
+      ...[[0.88, 1.6], [-0.88, 1.6], [0.88, -1.5], [-0.88, -1.5]].map(([wx, wz]) => [0.26, 0.68, 0.68, wx, 0.34, wz, 0x0c0d0f]),   // 四個輪子
       [0.3, 0.14, 0.04, 0.8, 0.5, -hl, TAIL], [0.3, 0.14, 0.04, -0.8, 0.5, -hl, TAIL],
     ]);
     return boxGeo([
-      [1.9, 0.75, K.len, 0, 0.7, 0, paint], [1.7, 0.6, 2.3, 0, 1.35, -0.2, GLASS],
+      [1.9, 0.6, K.len, 0, 0.72, 0, paint], [1.66, 0.58, 2.2, 0, 1.3, -0.25, GLASS], [1.7, 0.06, 1.9, 0, 1.6, -0.25, paint],   // 車身、車窗、車頂
+      [1.94, 0.2, K.len + 0.06, 0, 0.38, 0, DARK],                                                                             // 保險桿與底盤
+      ...[[0.86, 1.35], [-0.86, 1.35], [0.86, -1.35], [-0.86, -1.35]].map(([wx, wz]) => [0.24, 0.62, 0.62, wx, 0.31, wz, 0x0c0d0f]),   // 四個輪子
       [0.4, 0.16, 0.04, 0.7, 0.85, -hl, TAIL], [0.4, 0.16, 0.04, -0.7, 0.85, -hl, TAIL],   // 尾燈（沒亮的時候是暗紅色）
       [0.4, 0.12, 0.04, 0.7, 0.8, hl, 0xf3f0dc], [0.4, 0.12, 0.04, -0.7, 0.8, hl, 0xf3f0dc],   // 頭燈
       ...(kind === 'taxi' ? [[0.5, 0.18, 0.25, 0, 1.74, 0, 0xf5f5f5]] : []),   // 車頂燈
@@ -212,6 +215,23 @@ export function resetTraffic(level) {
   for (let k = 0; k < level.scooters; k++) spawnCar('scooter');
 }
 
+// 從 (x, z) 沿著 (fx, fz) 直直開下去，還要多遠會碰到公車的車身（已經在車身範圍內回傳 0，碰不到回傳 -1）
+// margin：車身左右各多留的寬度（自己的半個車寬加一點間隙）
+function busAhead(x, z, fx, fz, margin) {
+  const rx = x - bg.x, rz = z - bg.z;
+  const px = -rx * bg.fz + rz * bg.fx, pz = rx * bg.fx + rz * bg.fz;       // 自己在公車座標裡的位置（px 左右、pz 前後）
+  const dx = -fx * bg.fz + fz * bg.fx, dz = fx * bg.fx + fz * bg.fz;       // 自己的行進方向
+  const hx = 1.25 + margin, hz = 6.3;
+  let t0 = -Infinity, t1 = Infinity;
+  for (const [p, d, h] of [[px, dx, hx], [pz, dz, hz]]) {
+    if (Math.abs(d) < 1e-6) { if (Math.abs(p) > h) return -1; continue; }
+    const a = (-h - p) / d, b = (h - p) / d;
+    t0 = Math.max(t0, Math.min(a, b)); t1 = Math.min(t1, Math.max(a, b));
+  }
+  if (t1 < 0 || t0 > t1) return -1;
+  return Math.max(0, t0);
+}
+
 // 目標車道旁邊有沒有空位可以切過去（前後 7 公尺內沒有同向的車）
 function laneClear(c, off) {
   const rX = -c.d.z, rZ = c.d.x;
@@ -268,9 +288,13 @@ export function updateCars(dt) {
       if (fwd <= 0 || fwd > gap + look || Math.abs(-rx * fz + rz * fx) > (o.w + c.w) / 2 - 0.1) continue;
       want = Math.min(want, Math.max(0, fwd - gap) * 1.2);
     }
-    // 前方是公車也減速。外側車道夠寬，公車靠左一點走，機車就能從右邊過去
-    const rx = bg.x - c.x, rz = bg.z - c.z, fwd = rx * fx + rz * fz, gapB = 6 + c.len / 2 + 4.8;
-    if (fwd > 0 && fwd < gapB + look && Math.abs(-rx * fz + rz * fx) < 1.4 + c.w / 2) want = Math.min(want, Math.max(0, fwd - gapB) * 1.2);
+    // 公車是一個 12 × 2.5 公尺的長方形障礙：不管從哪個方向來（跟在後面、橫向穿越、對向轉彎），
+    // 只要照現在的方向開下去會撞上車身就減速停下來。外側車道夠寬，公車靠左一點走，機車還是能從右邊過去
+    const hit = busAhead(c.x, c.z, fx, fz, c.w / 2 + 0.25);
+    if (hit >= 0) {
+      const gap = hit - c.len / 2;
+      if (gap < look + 3) want = Math.min(want, Math.max(0, gap - 2.4) * 1.2);
+    }
     // 禮讓正在過馬路的行人
     for (const p of peds) {
       if (!p.walking) continue;

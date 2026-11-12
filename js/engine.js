@@ -11,6 +11,7 @@ const INERTIA = 3500;
 const CLUTCH_MAX = 1.6;    // 離合器完全接合時可傳遞的扭力（引擎最大扭力 = 1）
 const STALL_RPM = 300;
 const CRANK_TIME = 0.9;
+const OVER_REV = 2800;      // 入檔後轉速會超過這個數字就進不去
 // 怠速控制能補多少扭力：柴油引擎的調速器會一直補油把轉速拉回怠速，上限是低轉速、渦輪還沒增壓時的扭力，
 // 約最大扭力的一半；轉速被拖到 400 rpm 以下才快速沒力
 const lowTorque = (rpm) => clamp((rpm - 200) / 200, 0, 1) * 0.5;
@@ -44,12 +45,21 @@ export function setGear(g) {
   gearListeners.forEach((fn) => fn(g));
 }
 
-// 現在能不能入這個檔；不能時回傳原因
+// 現在能不能換到這個檔；不能時回傳原因。規則比照真車的手排變速箱：
+//   退檔（回空檔）：變速箱還在傳力時齒輪咬得很緊，要踩離合器才拉得出來；沒在出力（放掉油門、轉速剛好）時不踩也退得出來。
+//   入檔：離合器要踩到底。
+//   車速太快時低檔位進不去（進去的話引擎會超過紅線）。
+//   R 檔：只能從空檔進，而且車要停住；車還在倒退時也進不了前進檔。
 function shiftBlock(g) {
-  if (g !== 'N' && eng.clutch < CLUTCH_BITE) return '離合器要踩到底才能換檔';
-  if (g === 'R' && eng.gear !== 'N') return '要先回空檔才能入 R 檔';
-  if (g === 'R' && bus.v > 1) return '車還在前進，不能入 R 檔';
-  if (g !== 'R' && g !== 'N' && bus.v < -1) return '車還在倒退，先停下來';
+  if (g === 'N') return eng.clutch < CLUTCH_BITE && eng.tq > 0.2 ? '還在出力，踩離合器才退得出檔' : '';
+  if (eng.clutch < CLUTCH_BITE) return '離合器要踩到底才能換檔';
+  if (g === 'R') {
+    if (eng.gear !== 'N') return '要先回空檔才能入 R 檔';
+    if (Math.abs(bus.v) > 0.5) return '車停住才能入 R 檔';
+    return '';
+  }
+  if (bus.v < -0.5) return '車還在倒退，先停下來';
+  if (bus.v * rpmPerMs(g) > OVER_REV) return '車速太快，這個檔位進不去';
   return '';
 }
 export const canShift = (g) => app.running && !shiftBlock(g);
@@ -93,7 +103,7 @@ export function updateEngine(dt) {
   // GEAR_ACC 是空車的數值；載了乘客車變重，同樣的扭力加速度變小（引擎煞車也一樣）
   const load = loadFactor();
   const STEPS = 4, h = dt / STEPS, ratio = grip ? rpmPerMs(g) : 0, acc = grip ? GEAR_ACC[g] * load : 0;
-  let v = bus.v, sum = 0;
+  let v = bus.v, sum = 0, tq = 0;
   for (let k = 0; k < STEPS; k++) {
     const rpm = eng.rpm;
     let torque = 0;
@@ -110,11 +120,13 @@ export function updateEngine(dt) {
     const friction = rpm > 1 ? 0.07 + 0.11 * rpm / REDLINE : 0;
     const clutchT = grip ? clamp((rpm - v * dir * ratio) / 120, -1, 1) * grip : 0;
     eng.rpm = Math.max(0, rpm + (torque - friction - clutchT) * INERTIA * h);
+    tq = Math.abs(clutchT);
     const a = dir * clutchT * acc;
     v += a * h;
     sum += a;
   }
 
+  eng.tq = tq;
   if (eng.crank > 0) {
     eng.crank -= dt;
     // 離合器放掉，啟動馬達就斷電。發動中容許踏板稍微鬆一點（手機上另一隻手去按發動鈕時，踩離合器的手指容易往下滑）
