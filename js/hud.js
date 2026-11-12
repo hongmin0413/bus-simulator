@@ -4,6 +4,7 @@ import { stops, ROUTE_NODES, roundRect } from './world.js';
 import { cars } from './traffic.js';
 import { bus, bg, eng, game, zone, input, busCenter } from './state.js';
 import { lampOn } from './signals.js';
+import { waitingDepart, signalOn } from './rules.js';
 
 // 只有內容變了才去動畫面元素，省下每一格重排版面的時間
 const cache = {};
@@ -136,7 +137,8 @@ export function updateHud() {
   cls('hazard', 'lit', bus.hazard && bus.blink);
   cls('hand', 'on', bus.hand);
   cls('ign', 'on', eng.on);
-  text('ignTxt', eng.on ? '熄火' : '發動');
+  text('ignTxt', eng.on ? '熄火' : eng.crank > 0 ? '發動中' : '發動');
+  cls('ign', 'crank', eng.crank > 0);
   cls('wPark', 'on', bus.hand);
   cls('wDoor', 'on', bus.doors);
   cls('wStop', 'on', game.bell);
@@ -149,7 +151,9 @@ export function updateHud() {
   if (eng.crank > 0) hint = '發動中…按住「發動」，離合器不要放';
   else if (!eng.on) hint = eng.clutch >= CLUTCH_BITE ? '按住儀表旁的「發動」直到引擎點著' : '引擎未發動：左手把離合器踩到底，再按住「發動」';
   else if (bus.doors) hint = sv && !sv.done ? '乘客上下車中…' : '按「車門」關門發車';
+  else if (waitingDepart() && !signalOn('L')) hint = '起步前先打左方向燈';
   else if (zone.inZone) hint = still ? '按「車門」開門' : '請在停靠區內停車';
+  else if (zone.dist < 45 && zone.along < 0 && !still && !signalOn('R')) hint = '進站前先打右方向燈';
   else if (zone.dist < 12 && still) hint = '請對準黃色停靠區';
   else if (bus.hand && (eng.gear !== 'N' || !still)) hint = '手煞車還拉著：按儀表左邊的「P」放開';
   else if (still && game.served === 0 && game.onboard.length === 0) {

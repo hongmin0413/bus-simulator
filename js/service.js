@@ -1,7 +1,7 @@
 // 到站服務：開關門、乘客上下車、車資與下一站
 import { CAP, rand, warp } from './config.js';
 import { stops, updateFigs, beam } from './world.js';
-import { resetRules } from './rules.js';
+import { resetRules, checkArrive, startDepart } from './rules.js';
 import { bus, bg, game, zone, app, placeBusAt } from './state.js';
 import { setGear } from './engine.js';
 import { toast, addMoney } from './ui.js';
@@ -33,6 +33,7 @@ export function toggleDoors() {
     bus.doors = true;
     sfx.doorOpen();
     if (zone.inZone) {
+      checkArrive();
       const s = stops[game.next];
       const alight = game.onboard.filter((d) => d === game.next).length;
       game.service = {
@@ -48,6 +49,7 @@ export function toggleDoors() {
     sfx.doorClose();
     if (game.service) {
       game.service = null;
+      startDepart();
       const n = (game.next + 1) % stops.length;
       if (n === 0) { addMoney(100, '完成一圈'); game.lapDone = true; }
       setNextStop(n);

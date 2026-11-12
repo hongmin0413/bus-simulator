@@ -84,6 +84,29 @@ export function updateKeys(dt) {
 }
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// ───────── 不讓頁面被放大 ─────────
+// 有些手機瀏覽器（尤其 iPhone）不理會「禁止縮放」的設定，連點兩下或兩指張開還是會把整個網頁放大，而且全螢幕時縮不回去
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });   // iPhone 的兩指縮放
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault());
+{
+  // 連點兩下：第二下如果不是點在按鈕上（按鈕另外用 css 的 touch-action 擋），就取消它的預設動作
+  let last = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = performance.now();
+    if (now - last < 350 && !e.target.closest('button, summary')) e.preventDefault();
+    last = now;
+  }, { passive: false });
+  // 萬一還是被放大了：把禁止縮放的設定重新套用一次，瀏覽器會縮回原本的大小
+  const vv = window.visualViewport, meta = document.querySelector('meta[name="viewport"]');
+  if (vv && meta) vv.addEventListener('resize', () => {
+    if (vv.scale < 1.02) return;
+    const c = meta.content;
+    meta.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1';
+    requestAnimationFrame(() => { meta.content = c; });
+  });
+}
+
 // ───────── 觸控踏板：按得越靠上踩得越深 ─────────
 function bindPedal(id, name, min) {
   const el = $(id);
@@ -181,8 +204,19 @@ document.querySelectorAll('#signals [data-sig]').forEach((b) => tap(b, () => set
 tap($('hazard'), toggleHazard);
 tap($('hand'), toggleHand);
 // 發動鈕：按住到引擎點著才放；手指放開或滑出去就算放開
-tap($('ign'), () => ignition(true));
-for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('ign').addEventListener(ev, () => ignition(false));
+{
+  // 只有「同一根手指真的放開」才算放開。手機上長按時，系統可能會送出 pointercancel（長按選單、螢幕底部的系統手勢），
+  // 手指稍微滑出按鈕也會有 pointerleave；這些都不該讓發動中斷，否則在手機上永遠發不動
+  const b = $('ign');
+  let id = null;
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    id = e.pointerId;
+    try { b.setPointerCapture(id); } catch { /* 非必要 */ }
+    ignition(true);
+  });
+  b.addEventListener('pointerup', (e) => { if (e.pointerId === id) { id = null; ignition(false); } });
+}
 
 // 在畫面上拖曳：車外視角時是繞著公車轉動鏡頭（兩指捏合或滑鼠滾輪可拉近拉遠）；駕駛座視角且沒有傾斜感應器時是轉方向盤
 {

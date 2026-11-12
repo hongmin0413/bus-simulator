@@ -1,4 +1,4 @@
-// 交通違規判定：闖紅燈、超速、逆向、轉彎或變換車道沒打方向燈。全部用公車的格子座標（bg）判斷
+// 交通違規判定：闖紅燈、超速、逆向、轉彎或變換車道沒打方向燈、進站出站沒打方向燈。全部用公車的格子座標（bg）判斷
 import { CELL, LIMIT_KMH, ROAD_V, ROAD_H, nodeOf, hasLight } from './config.js';
 import { lightState } from './world.js';
 import { bus, bg, app } from './state.js';
@@ -9,16 +9,32 @@ let prevBox = null, speedingT = 0, wrongT = 0, laneCool = 0;
 let zone = null;        // 進入路口範圍時記下的行車方向與時間；不在路口範圍時為 null
 let lane = null;        // 目前在第幾個車道（由內往外，-1 = 壓到對向）；剛離開路口或重設後為 null
 const sigT = { L: -99, R: -99 };   // 左、右方向燈最後一次亮著的時間
+let departT = null;     // 在站牌關門的時間；之後起步時要檢查有沒有打左燈。不在等起步時為 null
 
 export function resetRules() {
-  prevBox = null; speedingT = 0; wrongT = 0; laneCool = 0; zone = null; lane = null;
+  prevBox = null; speedingT = 0; wrongT = 0; laneCool = 0; zone = null; lane = null; departT = null;
   sigT.L = sigT.R = -99;
 }
+
+// 進站：在停靠區開門時呼叫。靠邊停車前要打右燈（開門前 8 秒內打過就算）
+export function checkArrive() {
+  if (app.time - sigT.R > 8) addMoney(-20, '進站未打方向燈');
+}
+// 出站：在站牌關門時呼叫。之後車子一起步就檢查有沒有打左燈
+export function startDepart() { departT = app.time; }
+export const waitingDepart = () => departT !== null;
+// 這一側的方向燈現在是不是亮著（提示用）
+export const signalOn = (side) => bus.signal === side && !bus.hazard;
 
 export function updateRules(dt) {
   const t = app.time, kmh = Math.abs(bus.v) * 3.6;
   if (bus.signal && !bus.hazard) sigT[bus.signal] = t;   // 開著雙黃燈時別人看不出方向燈，不算
   laneCool -= dt;
+  // 出站起步：車子動起來的時候，從關門前 3 秒到現在都沒打過左燈就扣錢
+  if (departT !== null && bus.v > 1) {
+    if (sigT.L < departT - 3) addMoney(-20, '出站未打方向燈');
+    departT = null;
+  }
 
   // 闖紅燈：車頭進入路口的瞬間判定
   const hx = bg.x + bg.fx * 6, hz = bg.z + bg.fz * 6;

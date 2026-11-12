@@ -69,11 +69,15 @@ export function updateEngine(dt) {
     // 鍵盤：按下約 0.2 秒踩到底；放開時自動幫忙做半離合——
     // 還沒接合前放得快，進入接合區後看轉速差慢慢放，引擎快被拖熄火就先停住不放，轉速接上了再整個放開
     let down = 3;
-    // 什麼時候幫忙做半離合：
-    //   起步用的檔位（1、2、R）隨時都幫；車子有在動（時速 3 公里以上）的時候，換進任何檔位都幫；
-    //   只有靜止時用 3～6 檔起步不幫，會直接放開而熄火。手煞車沒放一律不幫。
+    // 什麼時候幫忙做半離合（只在正常行駛的情況下幫；其他情況離合器會直接放開，該熄火就熄火）：
+    //   行進間（時速 3 公里以上）：換進任何檔位都幫，邊煞車邊降檔也幫。
+    //   靜止起步：只有 1、2、R 檔幫；3～6 檔不幫。
+    //   靜止時以下情況一律不幫：手煞車沒放、車門沒關、還踩著煞車。
+    //   引擎沒發動（或正在發動）時也不幫。
     const wheelRpm = Math.abs(bus.v) * (g === 'N' ? 0 : rpmPerMs(g));
-    const assist = !bus.hand && g !== 'N' && (g === '1' || g === '2' || g === 'R' || Math.abs(bus.v) > 0.85);
+    const moving = Math.abs(bus.v) > 0.85;
+    const canStart = (g === '1' || g === '2' || g === 'R') && !bus.hand && !bus.doors && input.brake < 0.1;
+    const assist = eng.on && g !== 'N' && (moving ? !bus.hand && !bus.doors : canStart);
     if (assist && eng.clutch <= CLUTCH_BITE + 0.02 && eng.clutch > CLUTCH_BITE - CLUTCH_RANGE) {
       const slip = Math.abs(eng.rpm - wheelRpm);
       down = slip < 80 ? 2 : eng.rpm < 570 ? 0 : 0.3;
@@ -112,7 +116,8 @@ export function updateEngine(dt) {
 
   if (eng.crank > 0) {
     eng.crank -= dt;
-    if (eng.clutch < CLUTCH_BITE) eng.crank = 0;   // 離合器一放掉，啟動馬達就斷電
+    // 離合器放掉，啟動馬達就斷電。發動中容許踏板稍微鬆一點（手機上另一隻手去按發動鈕時，踩離合器的手指容易往下滑）
+    if (eng.clutch < CLUTCH_BITE - 0.25) { eng.crank = 0; toast('離合器鬆開了，發動中斷', 'bad'); }
     else if (eng.crank <= 0) { eng.on = true; eng.rpm = Math.max(eng.rpm, 350); toast('引擎已發動', 'good'); }
   }
   if (eng.on && eng.rpm < STALL_RPM && grip) {
