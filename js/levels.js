@@ -17,20 +17,20 @@ export const LEVELS = [
     nodes: [[1, 1], [3, 1], [3, 3], [1, 3]],
     stops: [[0, 0], [1, 1], [2, 0], [3, 1]],
     names: ['火車站', '中正路口', '國小', '公園'],
-    cars: 50, scooters: 30, parked: 4, peds: 20, crowd: 1, timeMul: 1.6, goal: 400,
+    cars: 20, scooters: 10, parked: 4, peds: 20, crowd: 1, timeMul: 1.6, goal: 400,
   },
   {
     name: '市區環線', desc: '8 站環線，一般車流，機車鑽車縫、路邊有違停，中間會經過一段巷道。',
     nodes: [[1, 1], [5, 1], [5, 4], [3, 4], [3, 5], [1, 5]],
     stops: [[0, 1], [0, 3], [1, 1], [2, 0], [3, 0], [4, 1], [5, 1], [5, 3]],
     names: ['中央車站', '市政府', '東門市場', '大學城', '河濱公園', '體育館', '科技園區', '美術館'],
-    cars: 100, scooters: 150, parked: 20, peds: 50, crowd: 1, timeMul: 1, goal: 720,
+    cars: 30, scooters: 40, parked: 15, peds: 40, crowd: 1, timeMul: 1, goal: 720,
   },
   {
     name: '下班尖峰', desc: '10 站大環線，汽機車與行人爆量，時間很趕。',
     nodes: [[1, 1], [5, 1], [5, 5], [2, 5], [2, 3], [1, 3]],
     stops: [[0, 1], [0, 3], [1, 0], [1, 2], [1, 3], [2, 1], [3, 0], [3, 1], [4, 0], [5, 1]],
     names: ['轉運站', '醫院', '百貨公司', '夜市', '文化中心', '高中', '傳統市場', '區公所', '圖書館', '捷運站'],
-    cars: 200, scooters: 250, parked: 50, peds: 150, crowd: 1.6, timeMul: 0.85, goal: 1150,
+    cars: 50, scooters: 60, parked: 30, peds: 60, crowd: 1.6, timeMul: 0.85, goal: 1150,
   },
 ];
