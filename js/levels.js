@@ -5,26 +5,32 @@
 //   cars / scooters：汽車（含計程車、小貨車）與機車的數量；parked：路邊違停車；peds：行人
 //   crowd：候車人潮的倍率（各站一開始等車的人數、上限、新乘客出現的速度）
 //   timeMul：到站時限的倍率；goal：一圈拿三顆星所需的收入
+//   school：駕訓班關卡（封閉場地，不載客，照大客車場考的方式扣分；場地與規則在 js/school.js）
 export const LEVELS = [
+  {
+    name: '駕訓班', desc: '封閉場地 14 個考驗項目：曲線進退、路邊停車、曲巷調頭、倒車入庫、換檔、狹橋、上坡起步…… 70 分及格。',
+    school: true, nodes: [], stops: [], names: [],
+    cars: 0, scooters: 0, parked: 0, peds: 0, crowd: 1, timeMul: 1, goal: 0,
+  },
   {
     name: '新手練習', desc: '4 站小環線，車少、時間寬裕。先把起步和換檔練熟。',
     nodes: [[1, 1], [3, 1], [3, 3], [1, 3]],
     stops: [[0, 0], [1, 1], [2, 0], [3, 1]],
     names: ['火車站', '中正路口', '國小', '公園'],
-    cars: 14, scooters: 9, parked: 4, peds: 14, crowd: 1, timeMul: 1.6, goal: 400,
+    cars: 50, scooters: 30, parked: 4, peds: 20, crowd: 1, timeMul: 1.6, goal: 400,
   },
   {
     name: '市區環線', desc: '8 站環線，一般車流，機車鑽車縫、路邊有違停，中間會經過一段巷道。',
     nodes: [[1, 1], [5, 1], [5, 4], [3, 4], [3, 5], [1, 5]],
     stops: [[0, 1], [0, 3], [1, 1], [2, 0], [3, 0], [4, 1], [5, 1], [5, 3]],
     names: ['中央車站', '市政府', '東門市場', '大學城', '河濱公園', '體育館', '科技園區', '美術館'],
-    cars: 34, scooters: 30, parked: 10, peds: 32, crowd: 1, timeMul: 1, goal: 720,
+    cars: 100, scooters: 150, parked: 20, peds: 50, crowd: 1, timeMul: 1, goal: 720,
   },
   {
     name: '下班尖峰', desc: '10 站大環線，汽機車與行人爆量，時間很趕。',
     nodes: [[1, 1], [5, 1], [5, 5], [2, 5], [2, 3], [1, 3]],
     stops: [[0, 1], [0, 3], [1, 0], [1, 2], [1, 3], [2, 1], [3, 0], [3, 1], [4, 0], [5, 1]],
     names: ['轉運站', '醫院', '百貨公司', '夜市', '文化中心', '高中', '傳統市場', '區公所', '圖書館', '捷運站'],
-    cars: 46, scooters: 52, parked: 16, peds: 52, crowd: 1.6, timeMul: 0.85, goal: 1150,
+    cars: 200, scooters: 250, parked: 50, peds: 150, crowd: 1.6, timeMul: 0.85, goal: 1150,
   },
 ];

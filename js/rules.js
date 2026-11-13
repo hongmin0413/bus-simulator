@@ -3,6 +3,7 @@ import { CELL, LIMIT_KMH, ROAD_V, ROAD_H, nodeOf, hasLight } from './config.js';
 import { lightState } from './world.js';
 import { bus, bg, app } from './state.js';
 import { addMoney } from './ui.js';
+import { schoolTech } from './school.js';
 
 const NEAR = 14;   // 離路口邊緣這麼近就算「正在過路口」：大客車轉彎要甩很大，這一段不判逆向與變換車道
 let prevBox = null, speedingT = 0, wrongT = 0, laneCool = 0;
@@ -26,7 +27,8 @@ export function updateComfort(dt, hit) {
     hardT = Math.abs(a) > HARD ? hardT + dt : 0;                                          // 持續的大加減速
     if (hardT > 0.5) why = a < 0 ? '急煞' : '急加速';
   }
-  if (why && comfortCool <= 0) { addMoney(-10, why + '，乘客站不穩'); comfortCool = 4; hardT = 0; }
+  // 駕訓班沒有乘客：同樣的情況算「其他技術操作不當」，每次扣 2 分
+  if (why && comfortCool <= 0) { if (app.school) schoolTech(why + '（操作不當）'); else addMoney(-10, why + '，乘客站不穩'); comfortCool = 4; hardT = 0; }
   prevV = v; prevA = a;
 }
 const STOP_JOLT = 2.4, SPIKE = 4.2, HARD = 3;

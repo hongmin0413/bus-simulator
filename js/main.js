@@ -1,7 +1,8 @@
 // 進入點：關卡選單、暫停選單、主迴圈
 import { CELL, EDGE, ROAD_V, ROAD_H, $ } from './config.js';
-import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, ORBIT0 } from './state.js';
-import { renderer, updateLights, beam, stops, ROUTE_NODES, buildRoute } from './world.js';
+import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, refreshGrid, ORBIT0 } from './state.js';
+import { renderer, updateLights, beam, stops, ROUTE_NODES, buildRoute, setCityVisible } from './world.js';
+import { school, resetSchool, updateSchool, setSchoolVisible, START, OX, OZ } from './school.js';
 import { updateBus, syncBusMesh } from './bus.js';
 import { setGear, shift, startEngine } from './engine.js';
 import { cars, resetTraffic, updateCars } from './traffic.js';
@@ -20,7 +21,12 @@ const store = {
   get(key, def) { try { return JSON.parse(localStorage.getItem(key)) ?? def; } catch { return def; } },
   set(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* 存不了就算了 */ } },
 };
-const best = store.get('bus-best', {});
+// 最佳紀錄以關卡名稱為索引（以前是用第幾關，中間插入新關卡會對不上，所以把舊紀錄搬過來）
+const best = store.get('bus-best2', null) ?? (() => {
+  const old = store.get('bus-best', {}), out = {};
+  ['新手練習', '市區環線', '下班尖峰'].forEach((name, n) => { if (old[n]) out[name] = old[n]; });
+  return out;
+})();
 const SENS_NAME = ['低', '中', '高'];
 app.sens = [0, 1, 2].includes(store.get('bus-sens', 1)) ? store.get('bus-sens', 1) : 1;
 // 每秒最多 60 格、解析度上限 1.5 倍：很多手機螢幕是 90／120 Hz，不限制的話顯示晶片會一直全速運轉、發燙
@@ -34,18 +40,28 @@ const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 function loadLevel(n) {
   const L = LEVELS[n];
   app.level = n;
+  app.school = !!L.school;
+  setCityVisible(!app.school);
+  setSchoolVisible(app.school);
   buildRoute(L);
   Object.assign(game, { money: 0, served: 0, onboard: [], service: null, timeMul: L.timeMul, lapDone: false });
   Object.assign(bus, { doors: false, doorT: 0, jolt: 0, roll: 0, brakeP: 0, wiper: false, wiperT: 0, steerFrac: 0, hand: true, signal: null, hazard: false, blink: false });
   Object.assign(eng, { clutch: 0, rpm: 0, on: false, thr: 0, crank: 0 });   // 開場引擎是熄火的，要踩離合器按「發動」
   input.gas = input.brake = input.clutch = 0;
   // 起點：路線第一個路口往東 24 公尺、最外側車道
-  const [i0, j0] = ROUTE_NODES[0], road = ROAD_H[j0];
-  placeBusAt(i0 * CELL + ROAD_V[i0].half + 24, j0 * CELL + road.half - EDGE - 2.3, Math.PI / 2);
+  if (app.school) {
+    // 駕訓班：停在起點框裡，車頭朝南
+    Object.assign(bus, { x: OX + START.x, z: OZ + START.z, h: START.h, v: 0, steer: 0 });
+    refreshGrid();
+    resetSchool();
+  } else {
+    const [i0, j0] = ROUTE_NODES[0], road = ROAD_H[j0];
+    placeBusAt(i0 * CELL + ROAD_V[i0].half + 24, j0 * CELL + road.half - EDGE - 2.3, Math.PI / 2);
+  }
   resetRules();
   resetTraffic(L);
   resetPeds(L.peds);
-  setNextStop(0);
+  if (!app.school) setNextStop(0);
   setGear('N');
   syncBusMesh();
   resetHud();
@@ -56,11 +72,12 @@ function renderLevels() {
   box.textContent = '';
   LEVELS.forEach((L, n) => {
     const b = document.createElement('button');
-    const rec = best[n];
+    const rec = best[L.name];
     const add = (cls, text) => { const e = document.createElement('span'); e.className = cls; e.textContent = text; b.appendChild(e); };
     add('nm', `${n + 1}. ${L.name}`);
     add('ds', L.desc);
-    add('rc', rec ? `${stars(rec.stars)}　最佳 $${rec.money}` : `尚未完成　三星目標 $${L.goal}`);
+    if (L.school) add('rc', rec ? `${stars(rec.stars)}　最佳 ${rec.score} 分` : '尚未完成　70 分及格');
+    else add('rc', rec ? `${stars(rec.stars)}　最佳 $${rec.money}` : `尚未完成　三星目標 $${L.goal}`);
     b.addEventListener('click', () => startLevel(n));
     box.appendChild(b);
   });
@@ -109,7 +126,7 @@ function openMenu(mode) {
   setAudioPaused(true);
   input.gas = input.brake = input.clutch = 0;
   const result = mode === 'result';
-  $('menuTitle').textContent = result ? '完成一圈！' : '暫停';
+  $('menuTitle').textContent = !result ? '暫停' : !app.school ? '完成一圈！' : school.score >= 70 ? '考驗及格' : '考驗不及格';
   // 結算畫面只留「重新開始」「選擇關卡」
   $('mResume').hidden = $('mSens').hidden = $('mSound').hidden = result;
   $('result').hidden = !result;
@@ -126,10 +143,24 @@ function closeMenu() {
 }
 function showResult() {
   const L = LEVELS[app.level], earned = game.money;
+  $('resList').textContent = '';
+  if (app.school) {
+    // 駕訓班：100 分起算，70 分及格。90 分以上三顆星、及格兩顆星
+    const sc = Math.max(0, school.score), n = sc >= 90 ? 3 : sc >= 70 ? 2 : 1, old = best[L.name];
+    const record = !old || sc > old.score;
+    if (record) { best[L.name] = { score: sc, stars: n }; store.set('bus-best2', best); }
+    const t = Math.round(school.time);
+    $('resStars').textContent = stars(n);
+    $('resText').textContent = `${sc} 分（70 分及格）・用時 ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}${record ? '　新紀錄！' : `　最佳 ${old.score} 分`}`;
+    const rows = school.log.length ? school.log.map((it) => `${it.text}　−${it.n}`) : ['沒有任何扣分'];
+    for (const row of rows) { const li = document.createElement('li'); li.textContent = row; $('resList').appendChild(li); }
+    openMenu('result');
+    return;
+  }
   const n = earned >= L.goal ? 3 : earned >= L.goal * 0.6 ? 2 : 1;
-  const old = best[app.level];
+  const old = best[L.name];
   const record = !old || earned > old.money;
-  if (record) { best[app.level] = { money: earned, stars: n }; store.set('bus-best', best); }
+  if (record) { best[L.name] = { money: earned, stars: n }; store.set('bus-best2', best); }
   $('resStars').textContent = stars(n);
   $('resText').textContent = `總收入 $${earned}（三星目標 $${L.goal}）${record ? '　新紀錄！' : `　最佳 $${old.money}`}`;
   openMenu('result');
@@ -153,6 +184,12 @@ $('levelCancel').addEventListener('click', () => {
   $('menu').hidden = false;
   layout();
 });
+// 開始畫面與暫停選單的「操作說明」：另外跳出一個視窗
+const openHelp = () => { $('help').hidden = false; $('help').querySelector('.card').scrollTop = 0; };
+$('helpBtn').addEventListener('click', openHelp);
+$('mHelp').addEventListener('click', openHelp);   // 暫停選單也有，一樣另外跳出視窗
+$('helpClose').addEventListener('click', () => { $('help').hidden = true; });
+$('help').addEventListener('click', (e) => { if (e.target === $('help')) $('help').hidden = true; });
 // 切換全螢幕的按鈕（每個畫面各一個）
 function toggleFull() {
   if (document.fullscreenElement) { wantFull = false; document.exitFullscreen().catch(() => {}); }
@@ -190,6 +227,7 @@ function tick(dt) {
   app.time += dt;
   updateKeys(dt);
   updateBus(dt);
+  if (app.school) updateSchool(dt);
   updateService(dt);
   updateCars(dt);
   updatePeds(dt);
@@ -212,7 +250,7 @@ function frame(now) {
   render(dt);
 }
 
-loadLevel(0);   // 選單後面先放一個場景當背景
+loadLevel(LEVELS.findIndex((L) => !L.school));   // 選單後面先放一個城市的場景當背景（第 1 關是駕訓班，背景還是用城市）
 layout();
 renderLevels();
 $('loading').hidden = true;
@@ -221,7 +259,7 @@ requestAnimationFrame(frame);
 // 除錯用：在主控台以 __sim.step(n) 同步推進 n 格（每格 1/60 秒）
 window.__sim = {
   bus, bg, eng, game, zone, input, tilt, app, stops, cars, peds, shift, startEngine, toggleDoors, toggleHand, setSignal, toggleHazard,
-  LEVELS, loadLevel, startLevel, openMenu, closeMenu,
+  LEVELS, loadLevel, startLevel, openMenu, closeMenu, school, OX, OZ,
   step(n) { for (let k = 0; k < n; k++) tick(1 / 60); },
   // 測試用的自動駕駛：沿著目前這條路走，保持離中線 lat 公尺（右側為正）。每格呼叫一次再 step(1)；路是彎的，不轉方向盤會撞上人行道
   hold(lat) {

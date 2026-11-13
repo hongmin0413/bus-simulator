@@ -3,3 +3,6 @@ node_modules
 
 # 自簽 https 憑證（server.js 自動產生，每台電腦不同）
 /.cert/
+
+# 駕訓班場地參考圖（Google 地圖衛星影像，版權不屬於本專案，只在本機參考）
+/.agents/memory/images/driving-school/

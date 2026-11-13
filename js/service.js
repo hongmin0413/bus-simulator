@@ -6,6 +6,7 @@ import { bus, bg, game, zone, app, placeBusAt } from './state.js';
 import { setGear } from './engine.js';
 import { toast, addMoney } from './ui.js';
 import { sfx } from './audio.js';
+import { schoolResetPose } from './school.js';
 
 export function setNextStop(i) {
   game.next = i;
@@ -18,6 +19,13 @@ export function setNextStop(i) {
 
 export function resetBus() {
   if (bus.doors) return;
+  if (app.school) {   // 駕訓班：回到目前這一項的起點
+    const p = schoolResetPose();
+    Object.assign(bus, { x: p.x, z: p.z, h: p.h, v: 0, steer: 0, hand: true });
+    setGear('N');
+    toast('已回到這一項的起點');
+    return;
+  }
   const s = stops[(game.next + stops.length - 1) % stops.length];
   placeBusAt(s.x, s.z, s.heading);
   setGear('N');
@@ -58,6 +66,7 @@ export function toggleDoors() {
 }
 
 export function updateService(dt) {
+  if (app.school) return;
   if (!game.service) game.timeLeft -= dt;
   // 下車鈴：快到站時（150 公尺內），車上有人要在這一站下車就會按鈴
   if (!game.bell && !bus.doors && zone.dist > 20 && zone.dist < 150 && game.onboard.includes(game.next)) { game.bell = true; sfx.bell(); }

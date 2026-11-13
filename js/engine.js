@@ -13,8 +13,10 @@ const STALL_RPM = 300;
 const CRANK_TIME = 0.9;
 const OVER_REV = 2800;      // 入檔後轉速會超過這個數字就進不去
 // 怠速控制能補多少扭力：柴油引擎的調速器會一直補油把轉速拉回怠速，上限是低轉速、渦輪還沒增壓時的扭力，
-// 約最大扭力的一半；轉速被拖到 400 rpm 以下才快速沒力
-const lowTorque = (rpm) => clamp((rpm - 200) / 200, 0, 1) * 0.5;
+// 約最大扭力的八成（估的，而且偏高：一般說法 8～9 公升級柴油引擎在 600 rpm 左右大約有最大扭力的六成）；轉速被拖到 400 rpm 以下才快速沒力。
+// 這個數字決定不踩油門的坡道起步做不做得到：15% 的坡 1 檔要將近五成的扭力才撐得住車，剩下的餘裕就是半離合可以停留的範圍。
+// 使用者在駕訓班的坡道上實際是不補油就能起步，所以調到做得到為止
+const lowTorque = (rpm) => clamp((rpm - 200) / 200, 0, 1) * 0.8;
 
 // 按下發動鈕時做的事（測試時也可以直接呼叫，不用模擬「按住」）：引擎沒發動時是發動，一定要把離合器踩到底；
 // 引擎運轉中再按一次是熄火，跟真車轉鑰匙一樣不用踩離合器，但要車子停住才有效（避免行駛中誤觸）
@@ -83,15 +85,20 @@ export function updateEngine(dt) {
     // 什麼時候幫忙做半離合（只在正常行駛的情況下幫；其他情況離合器會直接放開，該熄火就熄火）：
     //   行進間（時速 3 公里以上）：換進任何檔位都幫，邊煞車邊降檔也幫。
     //   靜止起步：只有 1、2、R 檔幫；3～6 檔不幫。
-    //   靜止時以下情況一律不幫：手煞車沒放、車門沒關、還踩著煞車。
+    //   靜止時以下情況一律不幫：手煞車沒放、車門沒關、還踩著煞車（上坡起步例外，見下面）。
     //   引擎沒發動（或正在發動）時也不幫。
     const wheelRpm = Math.abs(bus.v) * (g === 'N' ? 0 : rpmPerMs(g));
     const moving = Math.abs(bus.v) > 0.85;
-    const canStart = (g === '1' || g === '2' || g === 'R') && !bus.hand && !bus.doors && input.brake < 0.1;
+    // 上坡起步（只有車頭朝上坡入 1 檔；使用者指定 2 檔、R 檔不幫）：踩著煞車或拉著手煞車也幫，離合器會慢放到半離合就停住，
+    // 等放開煞車車子開始走，再繼續放完。這是坡道起步的正常做法，不踩煞車車會先往下滑
+    const uphill = g === '1' && bus.pitch > 0.02;
+    const canStart = (g === '1' || g === '2' || g === 'R') && !bus.doors && (uphill || (!bus.hand && input.brake < 0.1));
     const assist = eng.on && g !== 'N' && (moving ? !bus.hand && !bus.doors : canStart);
     if (assist && eng.clutch <= CLUTCH_BITE + 0.02 && eng.clutch > CLUTCH_BITE - CLUTCH_RANGE) {
       const slip = Math.abs(eng.rpm - wheelRpm);
       down = slip < 80 ? 2 : eng.rpm < 570 ? 0 : 0.3;
+      // 上坡放開煞車後：車子還沒被帶動的話再多放一點（放到引擎快撐不住為止），不然 2 檔會卡在原地不動
+      if (uphill && !bus.hand && input.brake < 0.1 && slip >= 80 && eng.rpm >= 552) down = 0.2;
       // 轉速還在掉（例如踩著煞車或拉著手煞車）就把離合器踩回去一點，停在半離合不熄火
       if (slip >= 80 && eng.rpm < 545 && input.clutch < eng.clutch) eng.clutch = Math.min(CLUTCH_BITE, eng.clutch + 1.2 * dt);
     }
@@ -127,6 +134,9 @@ export function updateEngine(dt) {
   }
 
   eng.tq = tq;
+  // 半離合時引擎被車子拖著、轉速掉到怠速以下：車身會抖（駕駛靠這個感覺知道離合器咬住了）
+  const slipping = grip > 0 && Math.abs(eng.rpm - Math.abs(v) * ratio) > 60;
+  eng.lug += ((eng.on && slipping ? clamp((IDLE - 15 - eng.rpm) / 50, 0, 1) : 0) - eng.lug) * Math.min(1, dt * 10);
   if (eng.crank > 0) {
     eng.crank -= dt;
     // 離合器放掉，啟動馬達就斷電。發動中容許踏板稍微鬆一點（手機上另一隻手去按發動鈕時，踩離合器的手指容易往下滑）
@@ -135,6 +145,7 @@ export function updateEngine(dt) {
   }
   if (eng.on && eng.rpm < STALL_RPM && grip) {
     eng.on = false;
+    eng.stalls++;
     sfx.thump(0.35);
     toast('熄火了！踩住離合器，按「發動」', 'bad');
   }

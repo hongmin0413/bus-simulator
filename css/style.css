@@ -25,8 +25,11 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #info { flex: none; display: flex; flex-direction: column; gap: 4px; }
 #stats { padding: 3px 5px; display: flex; gap: 6px; justify-content: center; font-size: 12px; line-height: 1.35; white-space: nowrap; }
 #stats b { font-variant-numeric: tabular-nums; }
+#moneyIco { font-style: normal; }
+/* 駕訓班：顯示分數，沒有乘客數 */
+#stats.school #paxBox, #stats.school #moneyIco { display: none; }
 #mid { flex: 1; min-width: 0; display: flex; justify-content: center; }
-#nextstop { max-width: 100%; padding: 4px 7px 4px 4px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+#nextstop { max-width: 100%; min-width: min(100%, 118px); padding: 4px 8px 4px 4px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
 #nextstop > div:last-child { min-width: 0; }
 #stopName, #nextstop .sub { overflow: hidden; text-overflow: ellipsis; }
 #arrow { flex: none; font-size: 20px; color: #ffd54a; width: 22px; text-align: center; }
@@ -96,14 +99,14 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #left { left: 0; flex-direction: column; align-items: flex-start; }
 #leftRow { display: flex; gap: 8px; align-items: flex-end; }
 /* 方向燈撥桿：在方向盤左側，所以放左手 */
-#signals { display: flex; gap: 8px; }
+#signals { display: flex; gap: 8px; margin-bottom: min(10vh, 40px); }
 #signals button { width: 66px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .6); color: #8a8f98; font-size: 19px; touch-action: none; padding: 0; }
 #signals button.on { color: #2bff7a; border-color: #2bff7a; background: rgba(30, 110, 60, .55); }
 /* 儀表上方的指示燈與雙黃燈開關 */
 #lamps { display: flex; align-items: center; gap: 7px; }
-#hazard { pointer-events: auto; width: 46px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 90, 90, .7); background: rgba(60, 14, 14, .7); color: #ff6b6b; font-size: 17px; touch-action: none; padding: 0; }
-/* 喇叭（按住才響）、車門、雨刷：都在儀表正上方 */
-#horn, #doorBtn, #wiperBtn { pointer-events: auto; width: 52px; height: 34px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(14, 20, 30, .7); color: #fff; font-size: 13px; font-weight: 700; touch-action: none; padding: 0; }
+#hazard { pointer-events: auto; width: 40px; height: 28px; border-radius: 8px; border: 1px solid rgba(255, 90, 90, .7); background: rgba(60, 14, 14, .7); color: #ff6b6b; font-size: 15px; touch-action: none; padding: 0; }
+/* 喇叭（按住才響）、車門、雨刷：都在儀表正上方。這一排做得矮一點，上面的提示訊息才不容易被蓋到 */
+#horn, #doorBtn, #wiperBtn { pointer-events: auto; width: 44px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(14, 20, 30, .7); color: #fff; font-size: 12px; font-weight: 700; touch-action: none; padding: 0; }
 #horn.on, #doorBtn:active { background: rgba(80, 160, 255, .65); }
 #doorBtn.on { border-color: #ff5a5a; background: rgba(176, 42, 42, .75); }   /* 車門開著 */
 #wiperBtn.on { border-color: #7fd4ff; color: #7fd4ff; background: rgba(30, 80, 120, .6); }
@@ -118,7 +121,8 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 }
 .pedal i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; }
 .pedal span { position: relative; }
-#clutch { width: 78px; height: min(46vh, 190px); } #clutch i { background: rgba(255, 190, 70, .5); }
+/* 離合器縮短、跟上面的方向燈隔開一段：手機上左手踩著離合器時，大拇指才搆得到方向燈又不會誤觸 */
+#clutch { width: 78px; height: min(36vh, 150px); } #clutch i { background: rgba(255, 190, 70, .5); }
 #clutch.free i { background: rgba(120, 220, 150, .5); }
 /* 接合點刻度：踏板深度 25%~75% 之間是半離合 */
 #clutch::before, #clutch::after { content: ""; position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,.55); }
@@ -142,7 +146,8 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #knob.drag { border-color: #7fd4ff; transition: none; }
 
 /* ── 開始畫面 ── */
-#start, #rotate { position: fixed; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .86); overflow: auto; }
+#start, #rotate { position: fixed; inset: 0; display: grid; place-items: center; padding: 10px; background: rgba(8, 12, 18, .86); overflow: auto; }
+#start .card { max-width: 720px; padding: 12px 16px; }
 #start.hide { display: none; }
 #rotate { display: none; z-index: 9; font-size: 20px; font-weight: 700; text-align: center; background: #10141c; }
 @media (orientation: portrait) and (pointer: coarse) { #rotate { display: grid; } }
@@ -152,17 +157,35 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 .card ul { margin: 0 0 12px; padding-left: 20px; font-size: 13.5px; line-height: 1.7; }
 .card ul b { color: #7fd4ff; }
 .card .kb { font-size: 12px; opacity: .6; }
-.card details { margin-top: 10px; }
-.card summary { font-size: 14px; font-weight: 700; color: #7fd4ff; padding: 6px 0; }
 #loading { text-align: center; }
+/* 開始畫面：標題列（標題、操作說明、全螢幕）＋一行說明＋關卡。手機橫放的高度很矮，要一眼看完不用捲動 */
+#startHead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+#startHead h1 { margin: 0; flex: 1; min-width: 0; font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#startHead button { flex: none; padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 9px; border: 1px solid rgba(255,255,255,.25); background: #223046; color: #fff; }
+#helpBtn, #mHelp { border-color: #7fd4ff !important; color: #7fd4ff !important; }
+/* 暫停選單的標題列：跟開始畫面一樣，操作說明在右上 */
+#menuHead { display: flex; align-items: center; gap: 8px; }
+#menuHead h1 { flex: 1; margin: 0; text-align: left; }
+#mHelp { flex: none; padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 9px; border: 1px solid; background: #223046; }
+#menu #result { margin-top: 6px; }
+#startTip { font-size: 12.5px !important; margin-bottom: 8px !important; opacity: .75 !important; }
+/* 操作說明視窗 */
+#help { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 10px; background: rgba(8, 12, 18, .86); }
+#help .card { max-height: 100%; overflow: auto; padding: 12px 18px; }
+#helpHead { position: sticky; top: -12px; display: flex; align-items: center; gap: 8px; margin: -12px -18px 6px; padding: 10px 18px 8px; background: #18202c; }
+#helpHead h1 { margin: 0; flex: 1; font-size: 19px; }
+#helpClose { padding: 6px 16px; font-size: 14px; font-weight: 700; border-radius: 9px; border: 1px solid #2f8cff; background: #2f8cff; color: #fff; }
 /* 關卡選單 */
-#levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
-#levels button { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: #223046; color: #fff; display: flex; flex-direction: column; gap: 4px; font: inherit; }
+/* 關卡：手機橫放時一排四個；說明最多三行 */
+#levels { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+@media (min-width: 540px) { #levels { grid-template-columns: repeat(4, 1fr); } }
+#levels button { text-align: left; padding: 8px 9px; border-radius: 11px; border: 1px solid rgba(255,255,255,.2); background: #223046; color: #fff; display: flex; flex-direction: column; gap: 3px; font: inherit; min-width: 0; }
 #levels button:active { background: #2f8cff; }
-#levels .nm { font-size: 17px; font-weight: 800; }
-#levels .ds { font-size: 12.5px; opacity: .8; line-height: 1.45; }
-#levels .rc { font-size: 12.5px; color: #ffd54a; }
-#levelCancel { width: 100%; margin-top: 8px; padding: 10px; font-size: 15px; font-weight: 700; border: 1px solid #2f8cff; border-radius: 10px; background: #2f8cff; color: #fff; }
+#levels .nm { font-size: 15px; font-weight: 800; }
+#levels .ds { flex: 1; font-size: 11.5px; opacity: .8; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#levels .rc { font-size: 11.5px; color: #ffd54a; }
+@media (min-height: 420px) { #levels button { padding: 10px 11px; } #levels .nm { font-size: 16px; } #levels .ds { -webkit-line-clamp: 4; } }
+#levelCancel { width: 100%; margin-top: 7px; padding: 10px; font-size: 15px; font-weight: 700; border: 1px solid #2f8cff; border-radius: 10px; background: #2f8cff; color: #fff; }
 /* 暫停鈕與暫停／結算選單 */
 #sysBtns { display: flex; gap: 3px; pointer-events: auto; }
 #sysBtns button { flex: 1; min-width: 26px; height: 30px; font-size: 10.5px; font-weight: 700; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(14, 20, 30, .72); color: #fff; padding: 0; touch-action: none; display: grid; place-items: center; }
@@ -170,7 +193,6 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 .nofs .fsToggle { display: none !important; }
 .notouch #calBtn { display: none; }
 .card { position: relative; }
-#fsStart { position: absolute; top: 14px; right: 16px; padding: 6px 12px; font-size: 13px; font-weight: 700; border-radius: 9px; border: 1px solid rgba(255,255,255,.25); background: #223046; color: #fff; }
 #pauseBtn { font-size: 15px; font-weight: 900; letter-spacing: 2px; padding-left: 2px !important; }
 #menu { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 14px; background: rgba(8, 12, 18, .84); overflow: auto; }
 .card.small { max-width: 440px; text-align: center; }
@@ -180,3 +202,6 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 #mSens, #mSound { grid-column: span 2; }
 #resStars { font-size: 34px; color: #ffd54a; letter-spacing: 4px; }
 #resText { margin: 4px 0 0; }
+/* 駕訓班的扣分清單 */
+#resList { margin: 8px 0 0; padding: 0; list-style: none; max-height: 30vh; overflow: auto; font-size: 13px; line-height: 1.6; text-align: left; }
+#resList:empty { display: none; }

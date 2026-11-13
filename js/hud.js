@@ -5,6 +5,8 @@ import { cars } from './traffic.js';
 import { bus, bg, eng, game, zone, input, busCenter } from './state.js';
 import { lampOn } from './signals.js';
 import { waitingDepart, signalOn } from './rules.js';
+import { app } from './state.js';
+import { school, schoolInfo, ROUTE, BOUND, OX, OZ } from './school.js';
 
 // 只有內容變了才去動畫面元素，省下每一格重排版面的時間
 const cache = {};
@@ -54,11 +56,23 @@ function line(g, ax, az, bx, bz) {
   for (let k = 0; k <= n; k++) pts.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]);
   path(g, pts);
 }
+// 駕訓班的小地圖：場地座標 → 畫布位置（場地是長條形，整個放進去）
+const SK = (S - 16) / (BOUND.z1 - BOUND.z0), SP = (x, z) => [S / 2 + (x - (BOUND.x0 + BOUND.x1) / 2) * SK, 8 + (z - BOUND.z0) * SK];
 function drawBase() {
   const g = base.getContext('2d');
   g.clearRect(0, 0, S, S);
   g.fillStyle = 'rgba(14,20,30,.78)';
   roundRect(g, 0, 0, S, S, 14); g.fill();
+  if (app.school) {
+    g.fillStyle = '#39404c';
+    g.fillRect(...SP(BOUND.x0, BOUND.z0), (BOUND.x1 - BOUND.x0) * SK, (BOUND.z1 - BOUND.z0) * SK);
+    g.strokeStyle = '#3fa9ff'; g.lineWidth = 2.5; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    let down = false;
+    for (const p of ROUTE) { if (!p) { down = false; continue; } g[down ? 'lineTo' : 'moveTo'](...SP(p[0], p[1])); down = true; }
+    g.stroke();
+    return;
+  }
   g.strokeStyle = '#5a6272'; g.lineCap = 'round'; g.lineJoin = 'round';
   for (let i = 0; i <= N; i++) {
     g.lineWidth = Math.max(2, ROAD_V[i].half * 2 * K);
@@ -80,6 +94,19 @@ function drawMap() {
   const g = mapCtx;
   g.clearRect(0, 0, S, S);
   g.drawImage(base, 0, 0);
+  if (app.school) {
+    // 下一個項目（黃點）與公車
+    const fx = Math.sin(bus.h), fz = Math.cos(bus.h), [tx, tz] = SP(...schoolInfo().target), [x, z] = SP(bus.x - OX + fx * 2.7, bus.z - OZ + fz * 2.7);
+    g.fillStyle = '#ffd54a';
+    g.beginPath(); g.arc(tx, tz, 6, 0, 7); g.fill();
+    g.fillStyle = '#18e0a0'; g.strokeStyle = '#03241a'; g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(x + fx * 10, z + fz * 10);
+    g.lineTo(x - fx * 7 - fz * 6, z - fz * 7 + fx * 6);
+    g.lineTo(x - fx * 7 + fz * 6, z - fz * 7 - fx * 6);
+    g.closePath(); g.fill(); g.stroke();
+    return;
+  }
   g.fillStyle = '#c9ced6';
   for (const c of cars) { const d = c.kind === 'scooter' ? 2 : 3, [x, z] = P(c.x, c.z); g.fillRect(x - d / 2, z - d / 2, d, d); }
   // 站牌：圓圈裡寫第幾站；第 1 站（起點）是綠色，下一站是黃色
@@ -104,15 +131,30 @@ export function resetHud() { drawBase(); }
 
 let frameNo = 0;
 export function updateHud() {
-  const s = stops[game.next], kmh = Math.round(Math.abs(bus.v) * 3.6);
-  text('money', '$' + game.money);
-  text('pax', `${game.onboard.length}/${CAP}`);
-  text('stopNo', game.next === 0 ? `起點 1/${stops.length}` : `第 ${game.next + 1}/${stops.length} 站`);
-  text('stopName', s.name);
-  text('stopDist', Math.round(zone.dist) + ' m');
-  const t = Math.ceil(Math.abs(game.timeLeft)), late = game.timeLeft < 0;
-  text('stopTimer', (late ? '誤點 ' : '') + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'));
-  cls('stopTimer', 'late', late);
+  const sc = app.school ? schoolInfo() : null;
+  const s = sc ? null : stops[game.next], kmh = Math.round(Math.abs(bus.v) * 3.6);
+  cls('stats', 'school', !!sc);
+  // 要去的地方：下一站，或駕訓班的下一個項目（tx, tz：相對於公車的位置；fx, fz：公車的朝向）
+  let tx, tz, fx = bg.fx, fz = bg.fz;
+  if (sc) {
+    fx = Math.sin(bus.h); fz = Math.cos(bus.h);
+    tx = sc.target[0] - (bus.x - OX + fx * 2.7); tz = sc.target[1] - (bus.z - OZ + fz * 2.7);
+    text('money', Math.max(0, school.score) + ' 分');
+    text('stopNo', `第 ${sc.n}/${sc.total} 項`);
+    text('stopName', sc.name);
+    const t = Math.floor(school.time);
+    text('stopTimer', '用時 ' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'));
+    cls('stopTimer', 'late', false);
+  } else {
+    tx = s.x - bg.x; tz = s.z - bg.z;
+    text('money', '$' + game.money);
+    text('pax', `${game.onboard.length}/${CAP}`);
+    text('stopNo', game.next === 0 ? `起點 1/${stops.length}` : `第 ${game.next + 1}/${stops.length} 站`);
+    text('stopName', s.name);
+    const t = Math.ceil(Math.abs(game.timeLeft)), late = game.timeLeft < 0;
+    text('stopTimer', (late ? '誤點 ' : '剩餘 ') + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'));   // 還來得及是「剩餘」，超過了是「誤點」
+    cls('stopTimer', 'late', late);
+  }
   text('kmh', kmh);
   cls('kmh', 'over', kmh > LIMIT_KMH);
   style('speedNeedle', 'transform', `rotate(${Math.round(clamp(Math.abs(bus.v) * 3.6 / SPEED_MAX, 0, 1) * 180 - 90)}deg)`);
@@ -145,14 +187,14 @@ export function updateHud() {
   cls('wiperBtn', 'on', bus.wiper);
   cls('wStop', 'on', game.bell);
 
-  const tx = s.x - bg.x, tz = s.z - bg.z;
-  style('arrow', 'transform', `rotate(${Math.atan2(-tx * bg.fz + tz * bg.fx, tx * bg.fx + tz * bg.fz).toFixed(2)}rad)`);
+  style('arrow', 'transform', `rotate(${Math.atan2(-tx * fz + tz * fx, tx * fx + tz * fz).toFixed(2)}rad)`);
 
   let hint = '';
   const sv = game.service, still = Math.abs(bus.v) < 0.2;
   if (eng.crank > 0) hint = '發動中…按住「發動」，離合器不要放';
   else if (!eng.on) hint = eng.clutch >= CLUTCH_BITE ? '按住儀表旁的「發動」直到引擎點著' : '引擎未發動：左手把離合器踩到底，再按住「發動」';
   else if (bus.doors) hint = sv && !sv.done ? '乘客上下車中…' : '按「車門」關門發車';
+  else if (sc) hint = bus.hand && (eng.gear !== 'N' || !still) ? '手煞車還拉著：按儀表左邊的「P」放開' : sc.hint;
   else if (waitingDepart() && !signalOn('L')) hint = '起步前先打左方向燈';
   else if (zone.inZone) hint = still ? '按「車門」開門' : '請在停靠區內停車';
   else if (zone.dist < 45 && zone.along < 0 && !still && !signalOn('R')) hint = '進站前先打右方向燈';

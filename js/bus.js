@@ -1,7 +1,7 @@
 // 公車模型與行駛物理
 import { WHEELBASE, BODY_Z, clamp, angDiff, onRoad, unwarp } from './config.js';
 import { THREE, scene, box, boxGeo, vcMat, lambert, basic, stops } from './world.js';
-import { bus, bg, game, zone, input, tilt, app, refreshGrid, loadFactor } from './state.js';
+import { bus, bg, eng, game, zone, input, tilt, app, refreshGrid, loadFactor } from './state.js';
 import { updateEngine } from './engine.js';
 import { cars } from './traffic.js';
 import { addMoney } from './ui.js';
@@ -9,6 +9,7 @@ import { sfx } from './audio.js';
 import { updateSignals, lampOn } from './signals.js';
 import { peds, finishCrossing } from './peds.js';
 import { updateRules, updateComfort } from './rules.js';
+import { OX, OZ, groundY, schoolBlocked, schoolCrash } from './school.js';
 
 // 車身尺寸取甲類大客車（12 公尺級市區公車）常見的數值：長 12、寬 2.5、高約 3.5（含車頂冷氣）、軸距 6、前懸 2.7、後懸 3.3 公尺
 // 原點在後軸中心。區域 +z 為車頭，+x 為左側（駕駛座），-x 為右側（車門）
@@ -19,6 +20,7 @@ export const cabin = new THREE.Group();   // 駕駛艙內裝
 ext.position.z = cabin.position.z = BODY_Z;
 busMesh.add(ext, cabin);
 const brakeMat = basic(0x661111);
+const reverseMat = basic(0x8a8f96);   // 倒車燈：入 R 檔（引擎發動中）時亮白燈
 const sigMat = { L: basic(0x6a4a00), R: basic(0x6a4a00) };
 const doorMeshes = [], frontWheels = [], wipers = [];
 const WIPER_REST = -1.45, WIPER_SWEEP = 1.75;   // 雨刷橫躺的角度、一次擺多少（弧度）
@@ -53,6 +55,7 @@ let steeringWheel;
   for (const x of [-0.9, 0.9]) {
     box(ext, headlight, 0.4, 0.2, 0.06, x, 0.9, 9.03);
     box(ext, brakeMat, 0.4, 0.25, 0.06, x, 1.2, -3.01);
+    box(ext, reverseMat, 0.24, 0.18, 0.06, x * 0.58, 1.2, -3.01);   // 倒車燈在煞車燈內側
   }
   // 方向燈：前、後、車側各一顆（+x 是左側）
   for (const [side, x] of [['L', 1], ['R', -1]]) {
@@ -155,7 +158,7 @@ let pedCool = 0, hitCooldown = 0, peakP = 0, prevBrk = 0;
 function crash(text) {
   const hard = Math.abs(bus.v) > 1.5;
   bus.v = -bus.v * 0.25;
-  if (hard && hitCooldown <= 0) { addMoney(-50, text); sfx.thump(0.5); hitCooldown = 1.5; }
+  if (hard && hitCooldown <= 0) { if (app.school) schoolCrash(); else addMoney(-50, text); sfx.thump(0.5); hitCooldown = 1.5; }
 }
 
 export function updateBus(dt) {
@@ -184,15 +187,18 @@ export function updateBus(dt) {
   // 煞車的力道是固定的，車越重減速越慢；輪胎抓地力有上限，所以空車踩到八成多就到頂（6 m/s²），載滿時踩到底約 5.3
   const load = loadFactor();
   const brakeA = Math.min(6, brk * 7.2 * load) + (hand ? (Math.abs(bus.v) > 0.5 ? 3.5 * load : 8) : 0);
-  let a = engA;
+  // 坡道：重力沿著車身方向的分量（上坡時往後拉）。城市是平的，只有駕訓班的坡道有
+  const grav = -9.81 * Math.sin(bus.pitch), drive = engA + grav;
+  let a = drive;
   // 滾動阻力：大客車輪胎的滾動阻力係數約 0.008，加上軸承與傳動的損耗，約 0.09 m/s²（跟車重成正比，所以減速度不受載重影響）
   // 風阻：風阻係數 0.65、迎風面積 7.5 平方公尺，力道 = 2.93 × v²，除以空車 12 噸；車越重越不容易被風拖慢
   if (Math.abs(bus.v) > 0.02) a -= Math.sign(bus.v) * (brakeA + 0.09) + bus.v * Math.abs(bus.v) * 0.000244 * load;
   bus.v += a * dt;
   const braking = brk > 0.02 || hand;
-  if (v0 !== 0 && v0 * bus.v < 0 && (braking || Math.abs(engA) < 0.05)) bus.v = 0;
-  if (braking && Math.abs(bus.v) < 0.15 && Math.abs(engA) < brakeA) bus.v = 0;
-  if (Math.abs(bus.v) < 0.03 && Math.abs(engA) < 0.01) bus.v = 0;
+  if (v0 !== 0 && v0 * bus.v < 0 && (braking || Math.abs(drive) < 0.05)) bus.v = 0;
+  if (braking && Math.abs(bus.v) < 0.15 && Math.abs(drive) < brakeA) bus.v = 0;
+  // 停著的車：推力比滾動阻力小就不會動。在坡上沒踩煞車、引擎的力又撐不住，就會往下滑
+  if (Math.abs(bus.v) < 0.03 && Math.abs(drive) < (grav ? 0.09 : 0.01)) bus.v = 0;
   bus.v = clamp(bus.v, -6, 30);
   // 加減速造成的點頭感（離合器放太快時特別明顯）
   bus.jolt += (clamp((bus.v - v0) / dt, -8, 8) - bus.jolt) * Math.min(1, dt * 9);
@@ -207,9 +213,10 @@ export function updateBus(dt) {
 
   const nh = bus.h - (bus.v / WHEELBASE) * Math.tan(bus.steer) * dt;
   const nx = bus.x + Math.sin(nh) * bus.v * dt, nz = bus.z + Math.cos(nh) * bus.v * dt;
-  if (blocked(nx, nz, nh)) crash('撞上人行道');
+  if (app.school ? schoolBlocked(nx, nz, nh) : blocked(nx, nz, nh)) crash('撞上人行道');
   else { bus.x = nx; bus.z = nz; bus.h = nh; }
   refreshGrid();   // 以下的判定都在格子座標上做（bg：車身中心與朝向）
+  if (app.school) { updateModel(dt, braking); return; }   // 駕訓班：沒有車流、行人與站牌，項目的判定在 school.js
 
   // 與車輛碰撞
   const fx = bg.fx, fz = bg.fz;
@@ -250,7 +257,11 @@ export function updateBus(dt) {
   zone.dist = Math.hypot(sx, sz);
   zone.inZone = Math.abs(zone.along) < 4.5 && Math.abs(zone.lat) < 1.8 && Math.abs(angDiff(bg.h, s.heading)) < 0.3;
 
-  // 模型
+  updateModel(dt, braking);
+}
+
+// 車身模型上會動的部分：車門、前輪、方向盤、雨刷、煞車燈與方向燈
+function updateModel(dt, braking) {
   bus.doorT = clamp(bus.doorT + (bus.doors ? 1 : -1) * dt * 2, 0, 1);
   doorMeshes.forEach((d) => (d.position.z = d.userData.z - bus.doorT * 1.25));
   frontWheels.forEach((w) => (w.rotation.y = -bus.steer));
@@ -265,12 +276,20 @@ export function updateBus(dt) {
     for (const wp of wipers) wp.rotation.z = ang;
   }
   brakeMat.color.setHex(braking ? 0xff2020 : 0x661111);
+  reverseMat.color.setHex(eng.gear === 'R' && eng.on ? 0xffffff : 0x8a8f96);
   updateSignals(dt);
   for (const side of ['L', 'R']) sigMat[side].color.setHex(lampOn(side) ? 0xffb000 : 0x6a4a00);
   syncBusMesh();
 }
+busMesh.rotation.order = 'YXZ';   // 先轉朝向，再依坡度抬頭
 export function syncBusMesh() {
-  busMesh.position.set(bus.x, 0, bus.z);
+  // 坡道：前後軸所在的地面高度決定車身的高度與仰角
+  if (app.school) {
+    const yr = groundY(bus.x - OX, bus.z - OZ), yf = groundY(bus.x - OX + Math.sin(bus.h) * WHEELBASE, bus.z - OZ + Math.cos(bus.h) * WHEELBASE);
+    bus.y = yr; bus.pitch = Math.atan2(yf - yr, WHEELBASE);
+  } else bus.y = bus.pitch = 0;
+  busMesh.position.set(bus.x, bus.y, bus.z);
   busMesh.rotation.y = bus.h;
+  busMesh.rotation.x = -bus.pitch;
   ext.rotation.z = cabin.rotation.z = -bus.roll;   // 整個車身繞著地面的縱軸傾斜
 }

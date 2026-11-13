@@ -254,6 +254,9 @@ function slab(shape) {
   });
   instanced(FLAT, markMat(0xffffff, { map: moto, transparent: true, depthWrite: false }), icons);
 }
+// 到這裡為止加進場景的都是城市的東西（地面、街廓、標線）；駕訓班關卡會把它們全部藏起來
+const cityObjs = scene.children.filter((o) => o.isMesh);
+export function setCityVisible(on) { for (const o of cityObjs) o.visible = on; beam.visible = on; }
 // 機車待轉區的中心（格子座標）：朝 d 開進路口 (i, j) 時的右前角
 export function turnBox(d, i, j) {
   const r = rightOf(d), ho = ownRoad(d, i, j).half, hc = crossRoad(d, i, j).half;
@@ -356,6 +359,7 @@ const MAN_RED = manTex('#ff3b30', false), MAN_GREEN = manTex('#2cff70', true);
     instanced(face, pedManMats[key], pedMen[key]);
   }
 }
+cityObjs.push(...scene.children.filter((o) => o.isMesh && !cityObjs.includes(o)));   // 紅綠燈與行人號誌
 const shown = {};   // 各號誌目前顯示的內容，有變才重畫貼圖
 export function updateLights() {
   for (let g = 0; g < 2; g++) for (let a = 0; a < 2; a++) {

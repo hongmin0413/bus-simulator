@@ -29,8 +29,8 @@
     <div class="mirror" id="mirL"></div>
     <div id="info">
       <div class="panel" id="stats">
-        <span>💰 <b id="money">$0</b></span>
-        <span>👥 <b id="pax">0/65</b></span>
+        <span><i id="moneyIco">💰</i> <b id="money">$0</b></span>
+        <span id="paxBox">👥 <b id="pax">0/65</b></span>
       </div>
       <!-- 系統按鈕：暫停、全螢幕、視角、校正方向盤 -->
       <div id="sysBtns">
@@ -46,7 +46,7 @@
         <div>
           <div class="lbl" id="stopNo">下一站</div>
           <div id="stopName">—</div>
-          <div class="sub"><span id="stopDist">0 m</span> · <span id="stopTimer">0:00</span></div>
+          <div class="sub"><span id="stopTimer">0:00</span></div>
         </div>
       </div>
     </div>
@@ -57,7 +57,7 @@
 
   <!-- 提示與訊息：放在上排下方、左右手控制區之間，不會蓋到按鈕 -->
   <div id="msgs">
-    <!-- 行車視野輔助畫面：倒車時顯示車後，打方向燈時顯示那一側，其他時候不顯示 -->
+    <!-- 行車視野輔助畫面：倒車時顯示車後，其他時候不顯示 -->
     <div id="monitor" hidden><span id="monitorTxt">後方</span></div>
     <div class="panel" id="hint"></div>
     <div id="toasts"></div>
@@ -118,14 +118,21 @@
 
 <div id="start">
   <div class="card">
-    <button class="fsToggle" id="fsStart" data-label>全螢幕</button>
-    <h1>手排公車模擬器</h1>
-    <p>選一個關卡開始。依序停靠各站載客，跑完一圈就結算；準點、守法、不熄火，收入越高星等越高。</p>
+    <div id="startHead">
+      <h1>手排公車模擬器</h1>
+      <button id="helpBtn">操作說明</button>
+      <button class="fsToggle" id="fsStart" data-label>全螢幕</button>
+    </div>
+    <p id="startTip">選一個關卡開始。載客關卡依序停靠各站，跑完一圈結算；駕訓班是封閉場地的考驗項目練習。</p>
     <div id="levels"></div>
     <button id="levelCancel" hidden>取消，回到暫停選單</button>
     <p id="loading">載入中…</p>
-    <details>
-    <summary>操作說明</summary>
+  </div>
+</div>
+<!-- 操作說明：在開始畫面按「操作說明」才跳出來 -->
+<div id="help" hidden>
+  <div class="card">
+    <div id="helpHead"><h1>操作說明</h1><button id="helpClose">關閉</button></div>
     <ul>
       <li><b>方向盤</b>：把手機橫拿，像方向盤一樣左右旋轉。左上角的「校正」可重設正中位置。</li>
       <li><b>發動</b>：一開始引擎是熄火的。左手把離合器踩到底不放，再按住儀表右邊的「發動」約一秒，等引擎點著才放手（太早放開啟動馬達會停）。熄火後也是這樣重新發動。引擎運轉中、車子停住時再按一次就是熄火（不用踩離合器）。</li>
@@ -136,21 +143,21 @@
       <li><b>起步</b>：入 1 檔後，左手慢慢往下滑放離合器，右手補一點油門。放太快會頓一下，甚至熄火。在檔位上放開油門，車會慢到怠速就不再變慢（引擎會自己補油維持怠速），要停就踩煞車和離合器。</li>
       <li><b>停車</b>：停下來前要先踩離合器，否則會熄火。</li>
       <li><b>視角</b>：按左上角的「視角」在駕駛座和車外之間切換。在車外時用一根手指拖曳可以繞著公車看，兩根手指捏合可以拉近拉遠；切換視角後會記住上次的位置，重新開始時回到駕駛座。</li>
-      <li><b>行車視野畫面</b>：倒車時會自動顯示車後的畫面，打方向燈時顯示那一側的畫面，結束後自動關掉。</li>
+      <li><b>行車視野畫面</b>：打 R 檔倒車時會自動顯示車後的畫面，退出 R 檔就關掉。</li>
       <li><b>暫停</b>：左上角的「II」。可以繼續、重新開始、換關卡、調整轉向靈敏度、開關聲音。「II」旁邊的按鈕可以隨時切換全螢幕。</li>
       <li><b>交通規則</b>：靠右行駛，車身越過中線太久算逆向。紅燈會倒數；停在停止線後面，前面的白框是機車停等區。闖紅燈、超速、逆向、沒打方向燈、沒禮讓行人、碰撞都會扣錢。</li>
       <li><b>路況</b>：有大道、一般道路和巷道，路會彎。路邊有違停車要繞過去；行人走斑馬線時要停下來禮讓；機車會鑽車縫，左轉的機車會先停在路口的待轉區。</li>
       <li><b>儀表</b>：左邊時速表（紅色區是超過速限 50）、右邊轉速表（綠色區最省力）。中間是檔位，兩旁的 ◀ ▶ 是方向燈指示，下面三顆警示燈：P 手煞車、門 車門沒關、停 有乘客按了下車鈴。</li>
+      <li><b>駕訓班</b>：封閉的環形場地，依序通過 14 個項目（畫面上方顯示現在是第幾項，場地上有立牌）。100 分起算、70 分及格：車輪壓到黃色壓管、熄火、沒打方向燈都會扣分；車輪壓到白色的車道邊線、停車時車頭超過停止線直接扣 32 分。曲線進退要前進通過後再倒車退出來；路邊停車、倒車入庫、曲巷調頭都只能倒車一次。曲巷是 T 字形：右轉進去，到底左轉，倒車直直退到另一頭，再左轉出來。狹橋與坡道各有四條黑管，左右各夾出一條輪道，輪子要走在輪道裡。上坡起步：前輪停在坡道的兩條白線之間，踩著煞車把離合器慢慢放到車身開始抖，再放開煞車，車子就會自己往前走，不可以倒退。</li>
       <li><b>到站</b>：畫面上方會顯示下一站是第幾站，小地圖上的數字是站序（綠色是起點、黃色是下一站）。停進黃色停靠區後按「車門」，乘客上下車完再按一次關門。跑完一圈就結算。右上角圓鏡照的是車頭前方與右前角的死角。</li>
     </ul>
-    <p class="kb">鍵盤：W 油門・S 煞車・A D 方向・W S 與 Shift 都是按住越久踩越深、放開慢慢回彈，離合器在 1、2、R 檔起步與行進間換檔時會自動慢放（靜止時用 3～6 檔起步、手煞車沒放、車門沒關、還踩著煞車都不會，會熄火）・按住 Shift 再按住 Enter 約一秒發動，停車時按 Enter 熄火・1–6 / R / N 檔位（R 要先打 N）・空白鍵 手煞車・Q E 方向燈・H 雙黃燈・G 喇叭・F 車門・X 雨刷・C 視角（滑鼠拖曳轉動、滾輪縮放）・Backspace 回上一站・M 靜音・P 暫停</p>
-    </details>
+    <p class="kb">鍵盤：W 油門・S 煞車・A D 方向・W S 與 Shift 都是按住越久踩越深、放開慢慢回彈，離合器在 1、2、R 檔起步與行進間換檔時會自動慢放（靜止時用 3～6 檔起步、手煞車沒放、車門沒關、還踩著煞車都不會，會熄火）・按住 Shift 再按住 Enter 約一秒發動，停車時按 Enter 熄火・1–6 / R / N 檔位（R 要先打 N）・空白鍵 手煞車・Q E 方向燈・H 雙黃燈・G 喇叭・F 車門・X 雨刷・C 視角（滑鼠拖曳轉動、滾輪縮放）・Backspace 回上一站（駕訓班是回到這一項的起點）・M 靜音・P 暫停</p>
   </div>
 </div>
 <div id="menu" hidden>
   <div class="card small">
-    <h1 id="menuTitle">暫停</h1>
-    <div id="result" hidden><div id="resStars"></div><p id="resText"></p></div>
+    <div id="menuHead"><h1 id="menuTitle">暫停</h1><button id="mHelp">操作說明</button></div>
+    <div id="result" hidden><div id="resStars"></div><p id="resText"></p><ul id="resList"></ul></div>
     <div id="menuBtns">
       <button id="mResume" class="main">繼續</button>
       <button id="mRestart">重新開始</button>
