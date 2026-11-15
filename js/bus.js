@@ -9,24 +9,22 @@ import { sfx } from './audio.js';
 import { updateSignals, lampOn } from './signals.js';
 import { peds, finishCrossing } from './peds.js';
 import { updateRules, updateComfort } from './rules.js';
+import { cabin, updateCabin } from './cabin.js';
 
 // 車身尺寸取甲類大客車（12 公尺級市區公車）常見的數值：長 12、寬 2.5、高約 3.5（含車頂冷氣）、軸距 6、前懸 2.7、後懸 3.3 公尺
 // 原點在後軸中心。區域 +z 為車頭，+x 為左側（駕駛座），-x 為右側（車門）
 // 車身與駕駛艙的座標是照「車身從 z = -3 到 9」寫的，整組再往後移 BODY_Z（-0.3），前後懸才會是 2.7 / 3.3；輪子不跟著移
 export const busMesh = new THREE.Group();
 export const ext = new THREE.Group();     // 車外看得到的部分
-export const cabin = new THREE.Group();   // 駕駛艙內裝
-ext.position.z = cabin.position.z = BODY_Z;
+ext.position.z = BODY_Z;
 busMesh.add(ext, cabin);
 const brakeMat = basic(0x661111);
 const sigMat = { L: basic(0x6a4a00), R: basic(0x6a4a00) };
-const doorMeshes = [], frontWheels = [], wipers = [];
-const WIPER_REST = -1.45, WIPER_SWEEP = 1.75;   // 雨刷橫躺的角度、一次擺多少（弧度）
-let steeringWheel;
+const doorMeshes = [], frontWheels = [];
 {
-  // 不會動的方塊先收集起來，最後各合併成一個幾何體（車外一個、駕駛艙一個），減少手機的繪圖負擔
-  const E = [], C = [];
-  const TRIM = 0x2b3038, DARK = 0x14171c, RIM = 0x3a4049, GREY = 0x6b727c, YELLOW = 0xf2c200, ARCH = 0x101317, WINDOW = 0x1a2733;
+  // 車外不會動的方塊合併；駕駛艙由 cabin.js 獨立建模。
+  const E = [];
+  const DARK = 0x14171c, ARCH = 0x101317, WINDOW = 0x1a2733;
   const PAINT = 0x0e9f86, SKIRT = 0x22272e, PLATE = 0xf5f5f5;
   // 車身、腰線白帶、裙邊、側窗
   E.push([2.5, 2.9, 12, 0, 1.9, 3, PAINT], [2.52, 0.5, 12.02, 0, 1.25, 3, 0xf4f6f7], [2.52, 0.3, 12.02, 0, 0.6, 3, SKIRT], [2.54, 1.05, 10.4, 0, 2.55, 2.9, WINDOW]);
@@ -82,57 +80,25 @@ let steeringWheel;
     ext.add(w);
     if (z) frontWheels.push(w);
   }
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 12.8), basic(0x000000, { transparent: true, opacity: 0.28, depthWrite: false }));
+  // 一張低解析度 alpha 貼圖取代硬邊黑方塊，保留單一接地面片。
+  const shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = 128; shadowCanvas.height = 256;
+  const sg = shadowCanvas.getContext('2d');
+  sg.scale(1, 2);
+  const fade = sg.createRadialGradient(64, 64, 15, 64, 64, 64);
+  fade.addColorStop(0, 'rgba(0,0,0,.65)');
+  fade.addColorStop(0.65, 'rgba(0,0,0,.4)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  sg.fillStyle = fade; sg.fillRect(0, 0, 128, 128);
+  const shadowTex = new THREE.CanvasTexture(shadowCanvas);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 13.6), basic(0x000000, {
+    map: shadowTex, transparent: true, opacity: 0.65, depthWrite: false,
+  }));
   shadow.rotation.x = -Math.PI / 2;
-  shadow.position.set(0, 0.04, 3);
-  ext.add(shadow);
+  shadow.position.set(0, 0.025, 3 + BODY_Z);
+  busMesh.add(shadow);   // 不跟 ext 側傾，接地陰影才不會斜插路面或飄起。
   ext.add(new THREE.Mesh(boxGeo(E), vcMat));
 
-  // 駕駛艙（左駕）。駕駛的眼睛在車身座標 [0.8, 2.3, 7.3]（見 view.js），座位貼著左側車窗、在前輪前方
-  // 儀表台：低而平，上緣在視線下方，才看得到車頭前的路面
-  C.push([2.45, 0.5, 0.7, 0, 1.25, 8.62, TRIM], [2.45, 0.06, 0.75, 0, 1.52, 8.62, DARK]);
-  // 駕駛正前方的儀表罩與兩顆錶
-  C.push([0.86, 0.26, 0.3, 0.8, 1.66, 8.42, DARK]);
-  const gaugeGeo = new THREE.CircleGeometry(0.075, 20), faceMat = basic(0x24323f), needleMat = basic(0xff5a4a);
-  for (const gx of [0.62, 0.98]) {
-    const face = new THREE.Mesh(gaugeGeo, faceMat);
-    face.position.set(gx, 1.67, 8.265);
-    face.rotation.y = Math.PI;   // 面向駕駛
-    cabin.add(face);
-    box(cabin, needleMat, 0.012, 0.065, 0.005, gx - 0.015, 1.69, 8.26);
-  }
-  // 前擋風玻璃的框：左右 A 柱、上方的路線牌箱、駕駛側遮陽板、車內後照鏡
-  C.push([0.09, 1.85, 0.09, 1.215, 2.45, 8.98, DARK], [0.09, 1.85, 0.09, -1.215, 2.45, 8.98, DARK], [2.55, 0.34, 0.3, 0, 3.26, 8.88, DARK]);
-  C.push([0.9, 0.22, 0.03, 0.8, 3.0, 8.72, TRIM], [0.46, 0.15, 0.04, 0.05, 2.98, 8.74, DARK]);
-  box(cabin, basic(0x9fb4c6), 0.42, 0.11, 0.01, 0.05, 2.98, 8.715);
-  // 左側：駕駛旁的車身與窗框（窗台以下是車身，以上是玻璃）
-  C.push([0.08, 1.0, 2.9, 1.24, 1.05, 7.55, TRIM], [0.08, 0.1, 2.9, 1.24, 3.33, 7.55, DARK], [0.08, 1.85, 0.1, 1.24, 2.45, 6.2, DARK]);
-  // 地板與天花板；右前方是車門，地板在那裡下降成上車階梯
-  C.push([1.8, 0.06, 3.2, 0.37, 0.97, 7.4, GREY], [0.76, 0.06, 1.9, -0.9, 0.6, 8.0, GREY], [0.05, 0.37, 1.9, -0.52, 0.8, 8.0, YELLOW], [2.5, 0.05, 3.2, 0, 3.4, 7.4, TRIM]);
-  // 右側前門：門框後柱、門的下半部、扶手、投幣箱
-  C.push([0.08, 2.6, 0.1, -1.24, 2.05, 7.02, DARK], [0.06, 0.55, 1.85, -1.245, 0.72, 8.0, TRIM], [0.06, 0.08, 1.85, -1.245, 2.0, 8.0, DARK]);
-  C.push([0.045, 2.3, 0.045, -0.5, 2.15, 7.1, YELLOW], [0.3, 0.75, 0.3, -0.3, 1.4, 8.05, GREY], [0.32, 0.06, 0.32, -0.3, 1.8, 8.05, YELLOW]);
-  cabin.add(new THREE.Mesh(boxGeo(C), vcMat));
-  // 雨刷：兩支，軸在擋風玻璃下緣，平常橫躺著
-  const wiperGeo = boxGeo([[0.035, 0.9, 0.02, 0, 0.45, 0, 0x08090b], [0.05, 0.5, 0.03, 0, 0.55, 0, 0x08090b]]);
-  for (const x of [0.2, -0.75]) {
-    const wp = new THREE.Mesh(wiperGeo, vcMat);
-    wp.position.set(x, 1.6, 8.93);
-    wp.rotation.z = WIPER_REST;
-    cabin.add(wp);
-    wipers.push(wp);
-  }
-  // 方向盤：大客車的方向盤又大又平，像端著一個盤子
-  const pivot = new THREE.Group();
-  // 位置比真車離駕駛遠一點、高一點，這樣直視前方時畫面下緣還看得到方向盤的上半圈
-  pivot.position.set(0.8, 1.56, 7.98);
-  pivot.rotation.x = 1.0;   // 盤面朝上偏向駕駛，遠端比近端高
-  pivot.add(new THREE.Mesh(boxGeo([[0.1, 0.1, 0.55, 0, 0, 0.28, DARK]]), vcMat));   // 轉向柱往前下方伸進儀表台
-  steeringWheel = new THREE.Group();
-  steeringWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.027, 8, 32), lambert(RIM)));
-  steeringWheel.add(new THREE.Mesh(boxGeo([[0.48, 0.055, 0.03, 0, 0, 0, RIM], [0.055, 0.25, 0.03, 0, -0.125, 0, RIM], [0.16, 0.16, 0.05, 0, 0, 0, DARK]]), vcMat));
-  pivot.add(steeringWheel);
-  cabin.add(pivot);
   scene.add(busMesh);
 }
 
@@ -254,15 +220,12 @@ export function updateBus(dt) {
   bus.doorT = clamp(bus.doorT + (bus.doors ? 1 : -1) * dt * 2, 0, 1);
   doorMeshes.forEach((d) => (d.position.z = d.userData.z - bus.doorT * 1.25));
   frontWheels.forEach((w) => (w.rotation.y = -bus.steer));
-  steeringWheel.rotation.z = bus.steerFrac * Math.PI * 6;   // 方向盤左右各三圈
   // 雨刷：開著就一直來回擺；關掉後擺完這一趟回到原位才停
   if (bus.wiper || bus.wiperT > 0) {
     const before = bus.wiperT;
     bus.wiperT += dt / 1.3;
     if (before < 0.5 && bus.wiperT >= 0.5) sfx.wiper();
     if (bus.wiperT >= 1) { bus.wiperT = bus.wiper ? bus.wiperT - 1 : 0; sfx.wiper(); }
-    const ang = WIPER_REST + (1 - Math.cos(bus.wiperT * 2 * Math.PI)) / 2 * WIPER_SWEEP;
-    for (const wp of wipers) wp.rotation.z = ang;
   }
   brakeMat.color.setHex(braking ? 0xff2020 : 0x661111);
   updateSignals(dt);
@@ -273,4 +236,5 @@ export function syncBusMesh() {
   busMesh.position.set(bus.x, 0, bus.z);
   busMesh.rotation.y = bus.h;
   ext.rotation.z = cabin.rotation.z = -bus.roll;   // 整個車身繞著地面的縱軸傾斜
+  updateCabin();
 }

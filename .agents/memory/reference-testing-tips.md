@@ -24,6 +24,18 @@
 - 轉向可以用 devicemotion 模擬傾斜：`dispatchEvent(new Event('devicemotion'))` 並掛上 `accelerationIncludingGravity`；先送一次角度 0 讓它校正。電腦的 `screen.orientation.angle` 是 0。
 - 整趟自動駕駛的測試腳本，停車後要記得重新走起步流程，否則會以為遊戲卡住。
 
+## 渲染像素回歸
+- 在獨立測試分頁選關卡後執行 `await import('./tests/rendering.js').then(({ run }) => run())`。同步比較 WebGL 像素：瞬移／重設首格不能殘留舊鏡面，左右與倒車影像切換不能延後；分區邊界的主畫面和三面鏡子必須與關掉視錐裁切相同。
+- 測試暫時改動公車、鏡頭與暫停狀態，`finally` 還原；不要拿使用者正在玩的分頁測。`readPixels` 必須在同一段同步程式內緊接 `render()`，避免畫布清空。
+- `renderer.info.render` 現在統計整格所有 render passes 的 calls／triangles，不是只有 overlay；比較個別鏡頭時需取前後差值。
+- 主畫面用大批次，鏡面用 200 公尺分區；幾何、材質共用，instance buffer 各存一份。不要把主畫面也直接換成細分批次：實測主畫面 draw calls 曾由 118 暴增至 386，窄鏡面才適合這個取捨。
+- 靜態物件不自動更新矩陣；`view.render()` 每格先更新動態世界矩陣一次。若新增會動的場景物件，不可放進靜態批次；鏡頭的 `localToWorld` 要在矩陣更新後呼叫。
+- 建築立面的 UV 校正使用 vendored Three.js r160 的 `uv_vertex` shader chunk，在頂點階段依 instance 尺寸計算完整窗格；更新 Three.js 時需重新確認 shader 編譯與近／遠景窗格，不可只跑語法檢查。
+- GPU 成本用 `EXT_disjoint_timer_query_webgl2` 的 elapsed query，等 `QUERY_RESULT_AVAILABLE` 並排除 `GPU_DISJOINT_EXT` 後讀取；JS `render()` 耗時或 `gl.finish()` 的 CPU 計時不能當成 GPU 幀時間。正常排程和「每格強制重拍全部鏡面」要分開記錄，桌面 GPU 數字不能保證手機 FPS／溫度。
+- 新增 Three.js 貼圖／幾何時，UUID 建立也會消耗 `Math.random()`，所以相同亂數種子不一定得到相同城市。比較美術效果成本時，在同一份活場景切換材質／背景，保持幾何與相機固定；地面顆粒本身使用局部 PRNG，不逐格重畫。
+- 駕駛艙與 `DRIVER_EYE` 在 `js/cabin.js`，不再由 `bus.js` 匯出；`syncBusMesh()` 也會同步指針、警示燈、方向盤與雨刷。車內 62°／車外 66°；車內 HUD 隱藏重複的 SVG 指針但保留數字，切車外要確認雙錶恢復。
+- 車內動態儀表需檢查實際像素，不只讀 instanceColor 或角度：曾出現手煞車燈顏色有更新、卻被實體台面完全遮住。現有回歸會逐一改時速、轉速及手煞車，確認可見畫面確實變化；儀表罩下方台面須留空間，警示燈設在錶面上緣。
+
 ## 其他
 - 測結算畫面會寫入 localStorage 的最佳紀錄（`bus-best`），測完要把假資料刪掉。
 - 要把畫面存成圖檔（例如重做 `images/og-image.png`）：把 `app.running` 暫時設成 false 後呼叫 `view.render(0)`，同一段程式裡立刻把 WebGL 畫布畫到另一張 2D 畫布，再用 fetch 把 data URL 送到暫時開的本機 Node 接收程式存檔。

@@ -61,6 +61,8 @@ button, summary, #start, #menu, .card { touch-action: manipulation; }
 .gauge { min-width: 46px; }
 @media (min-width: 640px) { .gauge svg { display: block; } }
 @media (min-width: 700px) { .gauge svg { width: 104px; height: 54px; } }
+/* 車內已有立體雙錶，HUD 留數字與檔位，避免兩套指針擋住方向盤；車外恢復完整 HUD。 */
+#hud.cockpit .gauge svg { display: none; }
 .needle { transform-origin: 60px 58px; transform: rotate(-90deg); }
 .needle line { stroke: #ff8a3c; stroke-width: 2.4; stroke-linecap: round; }
 .needle.red line { stroke: #ff3b3b; }
