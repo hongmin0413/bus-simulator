@@ -1,7 +1,7 @@
 // 進入點：關卡選單、暫停選單、主迴圈
 import { CELL, EDGE, ROAD_V, ROAD_H, $ } from './config.js';
 import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, ORBIT0 } from './state.js';
-import { renderer, updateLights, beam, stops, ROUTE_NODES, buildRoute } from './world.js';
+import { updateLights, beam, stops, ROUTE_NODES, buildRoute } from './world.js';
 import { updateBus, syncBusMesh } from './bus.js';
 import { setGear, shift, startEngine } from './engine.js';
 import { cars, resetTraffic, updateCars } from './traffic.js';
@@ -23,9 +23,8 @@ const store = {
 const best = store.get('bus-best', {});
 const SENS_NAME = ['低', '中', '高'];
 app.sens = [0, 1, 2].includes(store.get('bus-sens', 1)) ? store.get('bus-sens', 1) : 1;
-// 每秒最多 60 格、解析度上限 1.5 倍：很多手機螢幕是 90／120 Hz，不限制的話顯示晶片會一直全速運轉、發燙
-const FPS = 60;
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+// 行駛最多 60 Hz，選單／暫停只畫 15 Hz；解析度由 view.layout 統一管理。
+const FPS = 60, MENU_FPS = 15;
 app.muted = store.get('bus-muted', false) === true;
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
@@ -98,7 +97,7 @@ async function startLevel(n) {
   app.paused = false;
   app.running = true;
   setAudioPaused(false);
-  last = performance.now();
+  last = nextFrame = performance.now();
 }
 
 // ───────── 暫停與結算選單 ─────────
@@ -121,7 +120,7 @@ function closeMenu() {
   $('menu').hidden = true;
   app.paused = false;
   setAudioPaused(false);
-  last = performance.now();
+  last = nextFrame = performance.now();
   if (wantFull) goFull();
 }
 function showResult() {
@@ -195,12 +194,17 @@ function tick(dt) {
   updatePeds(dt);
 }
 
-let last = performance.now();
+let last = performance.now(), nextFrame = last;
 function frame(now) {
   requestAnimationFrame(frame);
-  if (now - last < 1000 / FPS - 3) return;   // 限制每秒格數
+  if (document.hidden) { last = nextFrame = now; return; }
+  const interval = 1000 / (app.running && !app.paused ? FPS : MENU_FPS);
+  if (now <= last || now + 0.1 < nextFrame) return;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  // 保留刷新率不整除時的餘數；90 Hz 不再掉到 45 fps，144 Hz 也不再跑到 72 fps。
+  // 長時間停格後跳過過期的 deadline，不補畫積欠的影格。
+  nextFrame += interval * Math.max(1, Math.floor((now - nextFrame) / interval) + 1);
   if (app.running && !app.paused) {
     tick(dt);
     updateHud();
@@ -208,7 +212,7 @@ function frame(now) {
     if (game.lapDone) { game.lapDone = false; showResult(); }
   }
   updateLights();
-  beam.material.opacity = 0.16 + 0.08 * Math.sin(now / 300);
+  beam.material.opacity = 0.16 + 0.08 * Math.sin(app.time / 0.3);
   render(dt);
 }
 

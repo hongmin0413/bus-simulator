@@ -8,35 +8,68 @@ import { app } from './state.js';
 
 export { THREE };
 
-// 手機很容易發燙，所以解析度不開太高（上限在 main.js 設定）
+// 主畫面解析度與像素預算由 view.layout 統一設定。
 export const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xbcd8ee);
-scene.fog = new THREE.Fog(0xbcd8ee, 160, 520);
+// 場景根節點固定為單位矩陣，避免每個鏡頭都強迫更新所有靜態子節點。
+scene.matrixAutoUpdate = false;
+scene.background = skyTexture();
+scene.fog = new THREE.Fog(0xd5e1e7, 150, 520);
 export const camera = new THREE.PerspectiveCamera(66, 1, 0.3, 700);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.5));
-const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
+addStatic(new THREE.HemisphereLight(0xd4e4f4, 0x756c62, 1.25));
+const sun = new THREE.DirectionalLight(0xffefd5, 1.65);
 sun.position.set(120, 200, 60);
-scene.add(sun);
+addStatic(sun);
 
 export const UNIT = new THREE.BoxGeometry(1, 1, 1);
 const FLAT = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);   // 平貼地面的單位方塊（標線用）
 const dummy = new THREE.Object3D(), tmpColor = new THREE.Color();
-// items：{ x, y, z, sx, sy, sz, ry, c }，都是世界座標
-export function instanced(geo, mat, items) {
-  const m = new THREE.InstancedMesh(geo, mat, items.length);
-  items.forEach((it, k) => {
-    dummy.position.set(it.x, it.y, it.z);
-    dummy.scale.set(it.sx ?? 1, it.sy ?? 1, it.sz ?? 1);
-    dummy.rotation.y = it.ry ?? 0;
-    dummy.updateMatrix();
-    m.setMatrixAt(k, dummy.matrix);
-    if (it.c !== undefined) m.setColorAt(k, tmpColor.set(it.c));
-  });
-  m.frustumCulled = false;   // 散在整個城市，不能用單一包圍球裁切
-  scene.add(m);
-  return m;
+const STATIC_CHUNK = 2 * CELL;
+// 廣主視野優先少 draw calls；窄鏡面優先少三角形。兩組只共用幾何／材質，
+// 靜態 instance 矩陣多存一份，避免每個鏡頭重排／上傳整座城市的 instance buffer。
+const mainInstances = new THREE.Group(), mirrorInstances = new THREE.Group();
+addStatic(mainInstances); addStatic(mirrorInstances);
+scene.onBeforeRender = (renderer, scene, viewCamera) => {
+  mainInstances.visible = viewCamera === camera;
+  mirrorInstances.visible = viewCamera !== camera;
+};
+function addStatic(object, parent = scene) {
+  parent.add(object);
+  object.updateMatrix();
+  object.updateMatrixWorld(true);
+  object.matrixAutoUpdate = false;
+  object.matrixWorldAutoUpdate = false;
+}
+function addToChunk(chunks, x, z, item) {
+  const key = `${Math.floor(x / STATIC_CHUNK)},${Math.floor(z / STATIC_CHUNK)}`;
+  const batch = chunks.get(key);
+  if (batch) batch.push(item);
+  else chunks.set(key, [item]);
+}
+// items：{ x, y, z, sx, sy, sz, ry, c }，都是世界座標；只在城市建立時分區。
+function instanced(geo, mat, items) {
+  const chunks = new Map();
+  for (const it of items) addToChunk(chunks, it.x, it.z, it);
+  const build = (batch, parent) => {
+    const m = new THREE.InstancedMesh(geo, mat, batch.length);
+    batch.forEach((it, k) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.scale.set(it.sx ?? 1, it.sy ?? 1, it.sz ?? 1);
+      dummy.rotation.y = it.ry ?? 0;
+      dummy.updateMatrix();
+      m.setMatrixAt(k, dummy.matrix);
+      if (it.c !== undefined) m.setColorAt(k, tmpColor.set(it.c));
+    });
+    // 包圍球包含每個 instance 的完整變換，跨分區邊界的物件不會被誤裁掉。
+    m.computeBoundingSphere();
+    addStatic(m, parent);
+  };
+  if (chunks.size === 1) {
+    build(items, scene);
+  } else {
+    build(items, mainInstances);
+    for (const batch of chunks.values()) build(batch, mirrorInstances);
+  }
 }
 export const lambert = (color, extra) => new THREE.MeshLambertMaterial({ color, ...extra });
 export const basic = (color, extra) => new THREE.MeshBasicMaterial({ color, ...extra });
@@ -58,7 +91,9 @@ export function boxGeo(parts) {
     tmpColor.set(c);
     for (let i = 0, o = k * n; i < n; i += 3, o += 3) {
       pos[o] = P[i] * sx + x; pos[o + 1] = P[i + 1] * sy + y; pos[o + 2] = P[i + 2] * sz + z;
-      col[o] = tmpColor.r; col[o + 1] = tmpColor.g; col[o + 2] = tmpColor.b;
+      // 烘在既有頂點色裡的底部遮蔽與側面漸層，不增加材質、面數或逐格運算。
+      const shade = Nm[i + 1] < -0.5 ? 0.65 : 0.82 + 0.18 * (P[i + 1] + 0.5);
+      col[o] = tmpColor.r * shade; col[o + 1] = tmpColor.g * shade; col[o + 2] = tmpColor.b * shade;
     }
     nor.set(Nm, k * n);
   });
@@ -80,6 +115,46 @@ function canvasTex(w, h, draw) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.userData.g = g;
+  return tex;
+}
+
+// 只在載入時生成；全景天空隨鏡頭方向取樣，地平線顏色與遠霧接合。
+function skyTexture() {
+  const tex = canvasTex(512, 256, (g) => {
+    const sky = g.createLinearGradient(0, 0, 0, 140);
+    sky.addColorStop(0, '#417fb5');
+    sky.addColorStop(0.55, '#8ebada');
+    sky.addColorStop(0.94, '#d5e1e7');
+    sky.addColorStop(1, '#d5e1e7');
+    g.fillStyle = sky; g.fillRect(0, 0, 512, 256);
+    const haze = g.createRadialGradient(300, 55, 0, 300, 55, 85);
+    haze.addColorStop(0, 'rgba(255,240,206,.3)');
+    haze.addColorStop(1, 'rgba(255,240,206,0)');
+    g.fillStyle = haze; g.fillRect(0, 0, 512, 128);
+  });
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex;
+}
+
+function groundTexture(paving = false) {
+  const tex = canvasTex(128, 128, (g) => {
+    const image = g.createImageData(128, 128), data = image.data;
+    let seed = 7103;
+    for (let i = 0; i < data.length; i += 4) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const value = (paving ? 239 : 226) + ((seed >>> 24) / 255 - 0.5) * (paving ? 8 : 24);
+      data[i] = data[i + 1] = data[i + 2] = value;
+      data[i + 3] = 255;
+    }
+    g.putImageData(image, 0, 0);
+    if (paving) {
+      g.fillStyle = '#c3c5c3';
+      g.fillRect(0, 0, 128, 1); g.fillRect(0, 64, 128, 1);
+      g.fillRect(0, 0, 1, 128); g.fillRect(64, 0, 1, 128);
+    }
+  });
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = Math.min(2, renderer.capabilities.getMaxAnisotropy());
   return tex;
 }
 
@@ -105,9 +180,15 @@ function mergeGeos(list) {
     pos.set(ng.attributes.position.array, o); nor.set(ng.attributes.normal.array, o);
     o += ng.attributes.position.array.length;
   }
+  // 世界座標 UV，合併後的人行道接縫仍對齊，不隨街廓尺寸拉伸。
+  const uv = new Float32Array(o / 3 * 2);
+  for (let i = 0, j = 0; i < o; i += 3, j += 2) {
+    uv[j] = pos[i] / 2; uv[j + 1] = pos[i + 2] / 2;
+  }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, o), 3));
   out.setAttribute('normal', new THREE.BufferAttribute(nor.subarray(0, o), 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   return out;
 }
 // 格子座標上的矩形外框，取樣後轉成世界座標的點。r 是四個角的圓角半徑，順序為 (x0,z0)、(x1,z0)、(x1,z1)、(x0,z1)；0 = 直角
@@ -132,32 +213,60 @@ function slab(shape) {
   return g;
 }
 {
-  const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(WORLD + 200, WORLD + 200), lambert(0x3b3e44));
+  const roadTex = groundTexture();
+  roadTex.repeat.set((WORLD + 200) / 2, (WORLD + 200) / 2);
+  const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(WORLD + 200, WORLD + 200), lambert(0x454b52, { map: roadTex }));
   asphalt.rotation.x = -Math.PI / 2;
   asphalt.position.set(WORLD / 2, 0, WORLD / 2);
-  scene.add(asphalt);
+  addStatic(asphalt);
   // 城市外圍的草地：一大片挖掉城市範圍
   const outer = new THREE.Shape([new THREE.Vector2(-1200, -1200), new THREE.Vector2(WORLD + 1200, -1200), new THREE.Vector2(WORLD + 1200, WORLD + 1200), new THREE.Vector2(-1200, WORLD + 1200)]);
   outer.holes.push(new THREE.Path(outline(-ROAD_V[0].half, WORLD + ROAD_V[N].half, -ROAD_H[0].half, WORLD + ROAD_H[N].half, [0, 0, 0, 0])));
-  scene.add(new THREE.Mesh(slab(outer), lambert(0x6f9d5b)));
+  addStatic(new THREE.Mesh(slab(outer), lambert(0x6f9d5b)));
 
-  const tex = canvasTex(128, 256, (g) => {
-    g.fillStyle = '#e9e6df'; g.fillRect(0, 0, 128, 256);
+  // 六欄、十二層共用一張圖集；窗框、窗台與窗洞遮蔽都畫進貼圖。
+  const tex = canvasTex(256, 512, (g) => {
+    g.fillStyle = '#d7d5cd'; g.fillRect(0, 0, 256, 512);
+    const cw = 256 / 6, ch = 512 / 12;
     for (let r = 0; r < 12; r++) for (let c = 0; c < 6; c++) {
-      g.fillStyle = Math.random() < 0.2 ? '#ffe9a8' : '#42586e';
-      g.fillRect(6 + c * 20.5, 8 + r * 20.5, 13, 13);
+      const x = c * cw, y = r * ch, warm = Math.random() < 0.08;
+      g.fillStyle = 'rgba(48,56,60,.12)'; g.fillRect(x, y + ch - 2, cw, 2);
+      g.fillStyle = '#8c9391'; g.fillRect(x + 7, y + 7, cw - 13, ch - 15);
+      const glass = g.createLinearGradient(0, y + 9, 0, y + ch - 10);
+      glass.addColorStop(0, warm ? '#c9bb95' : '#91aebc');
+      glass.addColorStop(0.45, warm ? '#a89773' : '#678799');
+      glass.addColorStop(1, warm ? '#827966' : '#3f5969');
+      g.fillStyle = glass; g.fillRect(x + 9, y + 9, cw - 17, ch - 19);
+      g.fillStyle = '#c4ccc9';
+      g.fillRect(x + cw / 2, y + 9, 1, ch - 19);
+      g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(x + 9, y + 9, cw - 17, 1);
+      g.fillStyle = '#ebe9df'; g.fillRect(x + 6, y + ch - 9, cw - 11, 2);
+      g.fillStyle = 'rgba(38,46,50,.2)'; g.fillRect(x + 6, y + ch - 7, cw - 11, 2);
     }
   });
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   const wall = lambert(0xffffff, { map: tex }), roof = lambert(0x8a8f96);
+  // 在既有 Lambert 頂點階段校正 UV：每扇窗約寬 3m、每層 3.2m，
+  // 不再把同樣十二層窗戶硬拉到每棟樓的高度。片段階段仍只取樣原本的一張圖。
+  wall.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace('#include <uv_vertex>', `#include <uv_vertex>
+      #ifdef USE_INSTANCING
+        float facadeWidth = abs(normal.x) > 0.5 ? length(instanceMatrix[2].xyz) : length(instanceMatrix[0].xyz);
+        vec2 windows = max(vec2(1.0), floor(vec2(facadeWidth / 3.0, length(instanceMatrix[1].xyz) / 3.2) + 0.5));
+        vMapUv *= windows / vec2(6.0, 12.0);
+      #endif`);
+  };
   const palette = [0xf2e3c9, 0xd9e4ec, 0xe8c9b0, 0xcfd8c0, 0xe6e6e6, 0xc9cfe0, 0xf0d6d6, 0xb9c7d1];
 
-  const paved = [], parks = [], buildings = [], trunks = [], crowns = [];
+  const paved = new Map(), parks = new Map(), buildings = [], trunks = [], crowns = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const x0 = i * CELL + ROAD_V[i].half, x1 = (i + 1) * CELL - ROAD_V[i + 1].half;
     const z0 = j * CELL + ROAD_H[j].half, z1 = (j + 1) * CELL - ROAD_H[j + 1].half;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, sx = x1 - x0, sz = z1 - z0;
     const park = Math.random() < 0.17;
-    (park ? parks : paved).push(slab(new THREE.Shape(outline(x0, x1, z0, z1, [cornerR(i, j), cornerR(i + 1, j), cornerR(i + 1, j + 1), cornerR(i, j + 1)]))));
+    const center = warp(cx, cz);
+    addToChunk(park ? parks : paved, center.x, center.z, slab(new THREE.Shape(outline(x0, x1, z0, z1, [cornerR(i, j), cornerR(i + 1, j), cornerR(i + 1, j + 1), cornerR(i, j + 1)]))));
     if (park) {
       for (let k = 0; k < 14; k++) {
         const w = warp(cx + rand(-sx / 2 + 6, sx / 2 - 6), cz + rand(-sz / 2 + 6, sz / 2 - 6)), s = rand(0.8, 1.4);
@@ -177,8 +286,12 @@ function slab(shape) {
       });
     }
   }
-  scene.add(new THREE.Mesh(mergeGeos(paved), lambert(0xa3a39c)));
-  if (parks.length) scene.add(new THREE.Mesh(mergeGeos(parks), lambert(0x5f9e4c)));
+  const pavement = lambert(0xb1b0a6, { map: groundTexture(true) });
+  for (const batch of paved.values()) addStatic(new THREE.Mesh(mergeGeos(batch), pavement));
+  if (parks.size) {
+    const grass = lambert(0x72965c);
+    for (const batch of parks.values()) addStatic(new THREE.Mesh(mergeGeos(batch), grass));
+  }
   instanced(UNIT, [wall, wall, roof, roof, wall, wall], buildings);
   if (trunks.length) {
     instanced(UNIT, lambert(0x6b4a2f), trunks);
