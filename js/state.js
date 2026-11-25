@@ -11,7 +11,10 @@ export const bg = { x: 0, z: 0, h: 0, fx: 0, fz: 1 };
 // tq: 離合器正在傳遞的扭力大小（變速箱有沒有在出力）
 export const eng = { gear: 'N', clutch: 0, rpm: IDLE, on: true, thr: 0, crank: 0, tq: 0 };
 // timeMul: 關卡的到站時限倍率；lapDone: 剛跑完一圈（main.js 看到後顯示結算）
-export const game = { money: 0, served: 0, next: 0, timeLeft: 0, onboard: [], service: null, timeMul: 1, lapDone: false, bell: false };   // bell: 這一站有人按了下車鈴
+export function emptyStats(stopsTotal = 0) {
+  return { time: 0, boarded: 0, fare: 0, perfect: 0, onTime: 0, lapBonus: 0, stalls: 0, stopsTotal, penalties: {}, penaltyTotal: 0 };
+}
+export const game = { money: 0, served: 0, next: 0, timeLeft: 0, onboard: [], service: null, timeMul: 1, lapDone: false, bell: false, stats: emptyStats() };   // bell: 這一站有人按了下車鈴
 export const zone = { inZone: false, along: 0, lat: 0, dist: 0 };
 export const input = { gas: 0, brake: 0, clutch: 0, clutchSlow: false, left: false, right: false, drag: null };
 export const tilt = { active: false, sign: 1, zero: 0, raw: 0, val: 0, ux: 0, uy: 0, needCal: true };

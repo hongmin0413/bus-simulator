@@ -81,6 +81,7 @@ export function updateService(dt) {
     s.waiting--; updateFigs(s);
     game.onboard.push((sv.stop + 1 + Math.floor(Math.random() * (stops.length - 1))) % stops.length);
     sv.board--; sv.fare += 15; game.money += 15;
+    game.stats.boarded++; game.stats.fare += 15;
   } else {
     sv.done = true;
     if (sv.fare) toast(`車資收入 +$${sv.fare}`, 'good');
