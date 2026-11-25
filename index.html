@@ -148,11 +148,28 @@
   </div>
 </div>
 <div id="menu" hidden>
-  <div class="card small">
+  <div class="card small" id="menuCard">
     <h1 id="menuTitle">暫停</h1>
-    <div id="result" hidden><div id="resStars"></div><p id="resText"></p></div>
+    <div id="result" hidden>
+      <div id="resTop">
+        <div id="resStars"></div>
+        <div id="resTotal"></div>
+      </div>
+      <p id="resText"></p>
+      <div id="resGrid">
+        <div class="resBox">
+          <h2>營運表現</h2>
+          <div id="resOps" class="resList"></div>
+        </div>
+        <div class="resBox">
+          <h2>違規與扣款</h2>
+          <div id="resPenalties" class="resList"></div>
+        </div>
+      </div>
+    </div>
     <div id="menuBtns">
       <button id="mResume" class="main">繼續</button>
+      <button id="mNext" class="main" hidden>下一關</button>
       <button id="mRestart">重新開始</button>
       <button id="mLevels">選擇關卡</button>
       <button id="mSens">轉向靈敏度：中</button>

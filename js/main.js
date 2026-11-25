@@ -1,6 +1,6 @@
 // 進入點：關卡選單、暫停選單、主迴圈
 import { CELL, EDGE, ROAD_V, ROAD_H, $ } from './config.js';
-import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, ORBIT0 } from './state.js';
+import { bus, bg, eng, game, zone, input, tilt, app, placeBusAt, ORBIT0, emptyStats } from './state.js';
 import { renderer, updateLights, beam, stops, ROUTE_NODES, buildRoute } from './world.js';
 import { updateBus, syncBusMesh } from './bus.js';
 import { setGear, shift, startEngine } from './engine.js';
@@ -35,7 +35,7 @@ function loadLevel(n) {
   const L = LEVELS[n];
   app.level = n;
   buildRoute(L);
-  Object.assign(game, { money: 0, served: 0, onboard: [], service: null, timeMul: L.timeMul, lapDone: false });
+  Object.assign(game, { money: 0, served: 0, onboard: [], service: null, timeMul: L.timeMul, lapDone: false, stats: emptyStats(stops.length) });
   Object.assign(bus, { doors: false, doorT: 0, jolt: 0, roll: 0, brakeP: 0, wiper: false, wiperT: 0, steerFrac: 0, hand: true, signal: null, hazard: false, blink: false });
   Object.assign(eng, { clutch: 0, rpm: 0, on: false, thr: 0, crank: 0 });   // 開場引擎是熄火的，要踩離合器按「發動」
   input.gas = input.brake = input.clutch = 0;
@@ -109,9 +109,11 @@ function openMenu(mode) {
   setAudioPaused(true);
   input.gas = input.brake = input.clutch = 0;
   const result = mode === 'result';
-  $('menuTitle').textContent = result ? '完成一圈！' : '暫停';
-  // 結算畫面只留「重新開始」「選擇關卡」
+  $('menuCard').classList.toggle('result', result);
+  $('menuTitle').textContent = result ? `${LEVELS[app.level].name} · 完成一圈！` : '暫停';
+  // 結算畫面留「下一關」（最後一關不顯示）、「重新開始」、「選擇關卡」
   $('mResume').hidden = $('mSens').hidden = $('mSound').hidden = result;
+  $('mNext').hidden = !result || app.level >= LEVELS.length - 1;
   $('result').hidden = !result;
   $('mSens').textContent = '轉向靈敏度：' + SENS_NAME[app.sens];
   $('mSound').textContent = '聲音：' + (app.muted ? '關' : '開');
@@ -124,19 +126,63 @@ function closeMenu() {
   last = performance.now();
   if (wantFull) goFull();
 }
+function addResRow(box, label, val, cls = '') {
+  const row = document.createElement('div');
+  row.className = 'resRow' + (cls ? ' ' + cls : '');
+  const l = document.createElement('span');
+  l.className = 'lbl';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'val' + (cls === 'good' || cls === 'bad' ? ' ' + cls : '');
+  v.textContent = val;
+  row.append(l, v);
+  box.appendChild(row);
+}
+function fmtTime(sec) {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 function showResult() {
-  const L = LEVELS[app.level], earned = game.money;
-  const n = earned >= L.goal ? 3 : earned >= L.goal * 0.6 ? 2 : 1;
+  const L = LEVELS[app.level], earned = game.money, st = game.stats;
+  const n = earned >= L.goal ? 3 : earned >= L.goal * 0.6 ? 2 : earned > 0 ? 1 : 0;
   const old = best[app.level];
   const record = !old || earned > old.money;
   if (record) { best[app.level] = { money: earned, stars: n }; store.set('bus-best', best); }
   $('resStars').textContent = stars(n);
-  $('resText').textContent = `總收入 $${earned}（三星目標 $${L.goal}）${record ? '　新紀錄！' : `　最佳 $${old.money}`}`;
+  $('resTotal').textContent = `${earned >= 0 ? '' : '−'}$${Math.abs(earned)}`;
+  $('resTotal').classList.toggle('neg', earned < 0);
+  $('resText').textContent = `三星目標 $${L.goal}${record ? '　★ 新紀錄！' : `　最佳 $${old.money}`}`;
+
+  const ops = $('resOps');
+  ops.textContent = '';
+  addResRow(ops, '行駛時間', fmtTime(st.time));
+  addResRow(ops, '載客人數', `${st.boarded} 人`);
+  addResRow(ops, '車資收入', `+$${st.fare}`, 'good');
+  addResRow(ops, `準點到站（${st.onTime}/${st.stopsTotal}）`, `+$${st.onTime * 30}`, st.onTime ? 'good' : '');
+  addResRow(ops, `完美停靠（${st.perfect}/${st.stopsTotal}）`, `+$${st.perfect * 20}`, st.perfect ? 'good' : '');
+  addResRow(ops, '完成一圈', `+$${st.lapBonus}`, 'good');
+  addResRow(ops, '熄火次數', `${st.stalls} 次`, st.stalls ? 'bad' : 'good');
+
+  const pen = $('resPenalties');
+  pen.textContent = '';
+  const items = Object.entries(st.penalties).sort((a, b) => b[1].amount - a[1].amount);
+  if (!items.length) {
+    const clean = document.createElement('div');
+    clean.className = 'resClean';
+    clean.textContent = '零違規，安全駕駛！';
+    pen.appendChild(clean);
+  } else {
+    for (const [label, info] of items) {
+      addResRow(pen, `${label} ×${info.count}`, `−$${info.amount}`, 'bad');
+    }
+    addResRow(pen, '扣款合計', `−$${st.penaltyTotal}`, 'sub bad');
+  }
   openMenu('result');
 }
 
 $('pauseBtn').addEventListener('click', () => openMenu('pause'));
 $('mResume').addEventListener('click', closeMenu);
+$('mNext').addEventListener('click', () => startLevel(app.level + 1));
 $('mRestart').addEventListener('click', () => startLevel(app.level));
 // 從暫停選單去選關卡：遊戲維持暫停，選了才真的換；按取消就回到原本的選單，進度不變
 $('mLevels').addEventListener('click', () => {
@@ -188,6 +234,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && app
 // ───────── 主迴圈 ─────────
 function tick(dt) {
   app.time += dt;
+  game.stats.time += dt;
   updateKeys(dt);
   updateBus(dt);
   updateService(dt);

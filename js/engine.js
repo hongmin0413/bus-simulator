@@ -1,7 +1,7 @@
 // 手排動力系統：引擎轉速與車輪轉速是兩個獨立的量，靠離合器的摩擦力矩互相拉近。
 // 所以離合器放太快會頓一下甚至熄火，慢慢放（半離合）才能平順起步。
 import { IDLE, REDLINE, GEAR_ACC, rpmPerMs, CLUTCH_BITE, CLUTCH_RANGE, clamp } from './config.js';
-import { bus, eng, input, app, loadFactor } from './state.js';
+import { bus, eng, game, input, app, loadFactor } from './state.js';
 import { toast } from './ui.js';
 import { sfx } from './audio.js';
 
@@ -135,6 +135,7 @@ export function updateEngine(dt) {
   }
   if (eng.on && eng.rpm < STALL_RPM && grip) {
     eng.on = false;
+    game.stats.stalls++;
     sfx.thump(0.35);
     toast('熄火了！踩住離合器，按「發動」', 'bad');
   }
